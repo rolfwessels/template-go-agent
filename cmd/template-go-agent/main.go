@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/rolfwessels/template-go-agent/internal/agent"
 	"github.com/rolfwessels/template-go-agent/internal/config"
@@ -26,17 +29,23 @@ func run() error {
 		return err
 	}
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer stop()
 
-	a, err := agent.New(ctx, cfg)
-	if err != nil {
-		return fmt.Errorf("initializing agent: %w", err)
-	}
+	pool := agent.NewPool(
+		func(ctx context.Context) (*agent.Agent, error) {
+			return agent.New(ctx, cfg)
+		},
+		time.Duration(cfg.SessionTimeoutMinutes)*time.Minute,
+		nil,
+	)
 
-	return runPlatform(ctx, a, cli.New())
+	result := runPlatform(ctx, pool, cli.New())
+	pool.Shutdown(context.Background())
+	return result
 }
 
-func runPlatform(ctx context.Context, a *agent.Agent, p platform.MessagePlatform) error {
+func runPlatform(ctx context.Context, pool *agent.AgentPool, p platform.MessagePlatform) error {
 	if err := p.Connect(ctx); err != nil {
 		return fmt.Errorf("connecting platform: %w", err)
 	}
@@ -50,7 +59,7 @@ func runPlatform(ctx context.Context, a *agent.Agent, p platform.MessagePlatform
 	fmt.Printf("template-go-agent v%s — type your question and press Enter (Ctrl+C to quit)\n", version)
 
 	for msg := range msgs {
-		answer, err := a.Generate(ctx, msg)
+		answer, err := pool.Send(ctx, "cli-user", msg)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			continue
