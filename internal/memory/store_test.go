@@ -2,49 +2,69 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestFileStore_SaveCreatesMarkdownFile(t *testing.T) {
+func TestFileStore_SaveCreatesSessionDateFile(t *testing.T) {
 	// arrange
 	dir := t.TempDir()
 	store := NewFileStore(dir)
-	e := Entry{ID: "entry-1", UserID: "alice", SessionID: "sess-1", Content: "Alice likes Go"}
+	e := Entry{UserID: "alice", SessionID: "sess-1", Content: "Alice likes Go"}
+	date := time.Now().UTC().Format("2006-01-02")
 
 	// act
 	err := store.Save(context.Background(), e)
 
 	// assert
 	require.NoError(t, err)
-	path := filepath.Join(dir, "alice", "entry-1.md")
+	path := filepath.Join(dir, "alice", fmt.Sprintf("sess-1-%s.md", date))
 	_, statErr := os.Stat(path)
 	assert.NoError(t, statErr)
 }
 
-func TestFileStore_AllReturnsStoredEntries(t *testing.T) {
+func TestFileStore_SaveAppendsFacts(t *testing.T) {
 	// arrange
 	dir := t.TempDir()
 	store := NewFileStore(dir)
 	ctx := context.Background()
-	_ = store.Save(ctx, Entry{ID: "e1", UserID: "alice", SessionID: "s1", Content: "fact one"})
-	_ = store.Save(ctx, Entry{ID: "e2", UserID: "alice", SessionID: "s1", Content: "fact two"})
+	date := time.Now().UTC().Format("2006-01-02")
+
+	// act
+	require.NoError(t, store.Save(ctx, Entry{UserID: "alice", SessionID: "s1", Content: "fact one"}))
+	require.NoError(t, store.Save(ctx, Entry{UserID: "alice", SessionID: "s1", Content: "fact two"}))
+
+	// assert
+	data, err := os.ReadFile(filepath.Join(dir, "alice", fmt.Sprintf("s1-%s.md", date)))
+	require.NoError(t, err)
+	body := string(data)
+	assert.Contains(t, body, "- fact one")
+	assert.Contains(t, body, "- fact two")
+}
+
+func TestFileStore_AllReturnsStoredFacts(t *testing.T) {
+	// arrange
+	dir := t.TempDir()
+	store := NewFileStore(dir)
+	ctx := context.Background()
+	_ = store.Save(ctx, Entry{UserID: "alice", SessionID: "s1", Content: "fact one"})
+	_ = store.Save(ctx, Entry{UserID: "alice", SessionID: "s1", Content: "fact two"})
 
 	// act
 	entries, err := store.All(ctx, "alice")
 
 	// assert
 	require.NoError(t, err)
-	require.Len(t, entries, 2)
-	var contents []string
-	for _, e := range entries {
-		contents = append(contents, e.Content)
-	}
-	assert.ElementsMatch(t, []string{"fact one", "fact two"}, contents)
+	require.Len(t, entries, 1)
+	assert.Contains(t, entries[0].Content, "fact one")
+	assert.Contains(t, entries[0].Content, "fact two")
 }
 
 func TestFileStore_AllReturnsEmptyForUnknownUser(t *testing.T) {
@@ -64,7 +84,7 @@ func TestFileStore_AllAsContextFormatsEntries(t *testing.T) {
 	dir := t.TempDir()
 	store := NewFileStore(dir)
 	ctx := context.Background()
-	_ = store.Save(ctx, Entry{ID: "e1", UserID: "bob", SessionID: "s1", Content: "Bob prefers dark mode"})
+	_ = store.Save(ctx, Entry{UserID: "bob", SessionID: "s1", Content: "Bob prefers dark mode"})
 
 	// act
 	got, err := store.AllAsContext(ctx, "bob")
@@ -84,4 +104,20 @@ func TestFileStore_AllAsContextEmptyForNoEntries(t *testing.T) {
 	// assert
 	require.NoError(t, err)
 	assert.Empty(t, got)
+}
+
+func TestFileStore_SaveDateHeaderInFile(t *testing.T) {
+	// arrange
+	dir := t.TempDir()
+	store := NewFileStore(dir)
+	date := time.Now().UTC().Format("2006-01-02")
+
+	// act
+	require.NoError(t, store.Save(context.Background(), Entry{UserID: "carol", SessionID: "s1", Content: "a fact"}))
+
+	// assert — file starts with date header
+	entries, _ := os.ReadDir(filepath.Join(dir, "carol"))
+	require.Len(t, entries, 1)
+	data, _ := os.ReadFile(filepath.Join(dir, "carol", entries[0].Name()))
+	assert.True(t, strings.HasPrefix(string(data), fmt.Sprintf("# %s", date)))
 }

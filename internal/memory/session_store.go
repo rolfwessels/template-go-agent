@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -105,6 +106,66 @@ func (s *SessionStore) Append(userID, sessionID, role, content string) error {
 	defer f.Close()
 	_, err = fmt.Fprintf(f, "%s\n", data)
 	return err
+}
+
+func (s *SessionStore) sessionPath(userID, sessionID string) string {
+	return filepath.Join(s.dir, userID, "sessions", sessionID+".jsonl")
+}
+
+func (s *SessionStore) cursorPath(userID, sessionID string) string {
+	return filepath.Join(s.dir, userID, "sessions", sessionID+".swept_until")
+}
+
+func (s *SessionStore) ReadCursor(userID, sessionID string) (int, error) {
+	data, err := os.ReadFile(s.cursorPath(userID, sessionID))
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("reading cursor: %w", err)
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		return 0, fmt.Errorf("parsing cursor: %w", err)
+	}
+	return n, nil
+}
+
+func (s *SessionStore) WriteCursor(userID, sessionID string, n int) error {
+	if err := os.WriteFile(s.cursorPath(userID, sessionID), []byte(strconv.Itoa(n)+"\n"), 0600); err != nil {
+		return fmt.Errorf("writing cursor: %w", err)
+	}
+	return nil
+}
+
+func (s *SessionStore) ReadFrom(userID, sessionID string, fromLine int) ([]*schema.Message, int, error) {
+	f, err := os.Open(s.sessionPath(userID, sessionID))
+	if os.IsNotExist(err) {
+		return nil, 0, nil
+	}
+	if err != nil {
+		return nil, 0, fmt.Errorf("opening session file: %w", err)
+	}
+	defer f.Close()
+
+	total := 0
+	var msgs []*schema.Message
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		total++
+		if total <= fromLine {
+			continue
+		}
+		var line sessionLine
+		if err := json.Unmarshal(scanner.Bytes(), &line); err != nil {
+			continue
+		}
+		msgs = append(msgs, toSchemaMessage(line))
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, total, fmt.Errorf("scanning session file: %w", err)
+	}
+	return msgs, total, nil
 }
 
 func newSessionID() string {

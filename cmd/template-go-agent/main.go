@@ -53,7 +53,7 @@ func run() error {
 
 	vectorStore := memory.NewChromemStoreOrWarn(ctx, cfg.OllamaBaseURL, ".storage/memory")
 
-	sweeper := memory.NewSweeper(fileStore, vectorStore, distiller)
+	sweeper := memory.NewSweeper(fileStore, vectorStore, distiller, sessions)
 
 	pool := agent.NewPool(
 		func(ctx context.Context, userID string, history []*schema.Message) (*agent.Agent, error) {

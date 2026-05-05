@@ -103,3 +103,68 @@ func TestSessionStore_Append_ZeroPaddedFilename(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Equal(t, sessID+".jsonl", entries[0].Name())
 }
+
+func TestSessionStore_ReadCursor_ReturnsZeroWhenMissing(t *testing.T) {
+	dir := t.TempDir()
+	store := NewSessionStore(dir)
+
+	cursor, err := store.ReadCursor("user1", "sess-1")
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, cursor)
+}
+
+func TestSessionStore_WriteCursor_PersistsCursor(t *testing.T) {
+	dir := t.TempDir()
+	store := NewSessionStore(dir)
+	sessDir := filepath.Join(dir, "user1", "sessions")
+	require.NoError(t, os.MkdirAll(sessDir, 0750))
+
+	require.NoError(t, store.WriteCursor("user1", "sess-1", 42))
+
+	cursor, err := store.ReadCursor("user1", "sess-1")
+	require.NoError(t, err)
+	assert.Equal(t, 42, cursor)
+}
+
+func TestSessionStore_ReadFrom_ReturnsMessagesFromOffset(t *testing.T) {
+	dir := t.TempDir()
+	store := NewSessionStore(dir)
+	sessID := "sess-1"
+	require.NoError(t, store.Append("user1", sessID, "user", "msg1"))
+	require.NoError(t, store.Append("user1", sessID, "assistant", "msg2"))
+	require.NoError(t, store.Append("user1", sessID, "user", "msg3"))
+
+	msgs, total, err := store.ReadFrom("user1", sessID, 1)
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, total)
+	require.Len(t, msgs, 2)
+	assert.Equal(t, "msg2", msgs[0].Content)
+	assert.Equal(t, "msg3", msgs[1].Content)
+}
+
+func TestSessionStore_ReadFrom_ReturnsEmptyWhenCursorAtEOF(t *testing.T) {
+	dir := t.TempDir()
+	store := NewSessionStore(dir)
+	sessID := "sess-1"
+	require.NoError(t, store.Append("user1", sessID, "user", "msg1"))
+	require.NoError(t, store.Append("user1", sessID, "assistant", "msg2"))
+
+	msgs, total, err := store.ReadFrom("user1", sessID, 2)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, total)
+	assert.Empty(t, msgs)
+}
+
+func TestSessionStore_ReadFrom_NoFileReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	store := NewSessionStore(dir)
+
+	msgs, total, err := store.ReadFrom("user1", "no-such-session", 0)
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, total)
+	assert.Empty(t, msgs)
+}

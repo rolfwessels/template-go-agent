@@ -17,13 +17,22 @@ type Sweeper struct {
 	store     *FileStore
 	vector    VectorStore
 	distiller Distiller
+	sessions  *SessionStore
 }
 
-func NewSweeper(store *FileStore, vector VectorStore, distiller Distiller) *Sweeper {
-	return &Sweeper{store: store, vector: vector, distiller: distiller}
+func NewSweeper(store *FileStore, vector VectorStore, distiller Distiller, sessions *SessionStore) *Sweeper {
+	return &Sweeper{store: store, vector: vector, distiller: distiller, sessions: sessions}
 }
 
-func (s *Sweeper) OnDestroy(ctx context.Context, userID, sessionID string, messages []*schema.Message) error {
+func (s *Sweeper) OnDestroy(ctx context.Context, userID, sessionID string, _ []*schema.Message) error {
+	cursor, err := s.sessions.ReadCursor(userID, sessionID)
+	if err != nil {
+		return fmt.Errorf("reading sweep cursor: %w", err)
+	}
+	messages, total, err := s.sessions.ReadFrom(userID, sessionID, cursor)
+	if err != nil {
+		return fmt.Errorf("reading session messages: %w", err)
+	}
 	if len(messages) == 0 {
 		return nil
 	}
@@ -32,14 +41,10 @@ func (s *Sweeper) OnDestroy(ctx context.Context, userID, sessionID string, messa
 	if err != nil {
 		return fmt.Errorf("distilling memories for %s: %w", userID, err)
 	}
-	if len(facts) == 0 {
-		slog.Info("memory sweep complete", "userID", userID, "facts", 0)
-		return nil
-	}
 	slog.Info("memory sweep complete", "userID", userID, "facts", len(facts))
 	for i, fact := range facts {
 		e := Entry{
-			ID:        fmt.Sprintf("%s-%d", sessionID, i),
+			ID:        fmt.Sprintf("%s-%d-%d", sessionID, cursor, i),
 			UserID:    userID,
 			SessionID: sessionID,
 			Content:   strings.TrimSpace(fact),
@@ -52,5 +57,5 @@ func (s *Sweeper) OnDestroy(ctx context.Context, userID, sessionID string, messa
 			_ = s.vector.Add(ctx, e)
 		}
 	}
-	return nil
+	return s.sessions.WriteCursor(userID, sessionID, total)
 }

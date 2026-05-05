@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type Entry struct {
@@ -28,11 +29,23 @@ func (s *FileStore) Save(_ context.Context, e Entry) error {
 	if err := os.MkdirAll(userDir, 0750); err != nil {
 		return fmt.Errorf("creating memory dir: %w", err)
 	}
-	content := fmt.Sprintf("---\nuser_id: %s\nsession_id: %s\n---\n\n%s\n", e.UserID, e.SessionID, e.Content)
-	if err := os.WriteFile(filepath.Join(userDir, e.ID+".md"), []byte(content), 0600); err != nil {
-		return fmt.Errorf("writing memory file: %w", err)
+	date := time.Now().UTC().Format("2006-01-02")
+	path := filepath.Join(userDir, fmt.Sprintf("%s-%s.md", e.SessionID, date))
+
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		header := fmt.Sprintf("# %s\n\n", date)
+		if err := os.WriteFile(path, []byte(header), 0600); err != nil {
+			return fmt.Errorf("creating memory file: %w", err)
+		}
 	}
-	return nil
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		return fmt.Errorf("opening memory file: %w", err)
+	}
+	defer f.Close()
+	_, err = fmt.Fprintf(f, "- %s\n", strings.TrimSpace(e.Content))
+	return err
 }
 
 func (s *FileStore) All(_ context.Context, userID string) ([]Entry, error) {
@@ -69,17 +82,17 @@ func (s *FileStore) AllAsContext(ctx context.Context, userID string) (string, er
 	}
 	var sb strings.Builder
 	for _, e := range entries {
-		sb.WriteString("- ")
-		sb.WriteString(e.Content)
+		sb.WriteString(strings.TrimSpace(e.Content))
 		sb.WriteString("\n")
 	}
 	return sb.String(), nil
 }
 
 func extractContent(raw string) string {
-	parts := strings.SplitN(raw, "---", 3)
-	if len(parts) == 3 {
-		return strings.TrimSpace(parts[2])
+	// strip the `# date\n\n` header and return the bullet list body
+	idx := strings.Index(raw, "\n\n")
+	if idx >= 0 {
+		return strings.TrimSpace(raw[idx+2:])
 	}
 	return strings.TrimSpace(raw)
 }

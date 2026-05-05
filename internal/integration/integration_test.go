@@ -58,12 +58,13 @@ func (d *stubDistiller) Distill(_ context.Context, _ []*schema.Message) ([]strin
 	return d.facts, nil
 }
 
-// newTestPool creates an AgentPool wired to a temp FileStore and stub distiller.
+// newTestPool creates an AgentPool wired to a temp FileStore, SessionStore, and stub distiller.
 // The factory fn is called for each new user session and receives the loaded memory context.
 func newTestPool(t *testing.T, dir string, distillerFacts []string, timeout time.Duration, makeGen func() *spyGenerator) (*agent.AgentPool, *memory.FileStore) {
 	t.Helper()
 	fileStore := memory.NewFileStore(dir)
-	sweeper := memory.NewSweeper(fileStore, nil, &stubDistiller{facts: distillerFacts})
+	sessions := memory.NewSessionStore(dir)
+	sweeper := memory.NewSweeper(fileStore, nil, &stubDistiller{facts: distillerFacts}, sessions)
 
 	pool := agent.NewPool(
 		func(ctx context.Context, userID string, history []*schema.Message) (*agent.Agent, error) {
@@ -72,6 +73,10 @@ func newTestPool(t *testing.T, dir string, distillerFacts []string, timeout time
 		},
 		timeout,
 		sweeper.OnDestroy,
+		agent.WithRecordHook(func(userID, sessionID, role, content string) {
+			_ = sessions.Append(userID, sessionID, role, content)
+		}),
+		agent.WithSessionProvider(sessions, 20),
 	)
 	return pool, fileStore
 }
