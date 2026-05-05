@@ -13,7 +13,9 @@ import (
 	"github.com/rolfwessels/template-go-agent/internal/config"
 )
 
-type generator interface {
+type generator = Generator
+
+type Generator interface {
 	Generate(ctx context.Context, input []*schema.Message, opts ...agent.AgentOption) (*schema.Message, error)
 }
 
@@ -29,6 +31,14 @@ type Agent struct {
 	systemPrompt  string
 	memoryContext string
 	history       ConversationHistory
+}
+
+func NewWithGenerator(gen Generator, systemPrompt string, opts ...Option) *Agent {
+	a := &Agent{react: gen, systemPrompt: systemPrompt}
+	for _, opt := range opts {
+		opt(a)
+	}
+	return a
 }
 
 func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error) {
