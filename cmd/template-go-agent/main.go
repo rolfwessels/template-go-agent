@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cloudwego/eino/schema"
 	"github.com/rolfwessels/template-go-agent/internal/agent"
 	"github.com/rolfwessels/template-go-agent/internal/config"
 	"github.com/rolfwessels/template-go-agent/internal/memory"
@@ -55,12 +56,13 @@ func run() error {
 	sweeper := memory.NewSweeper(fileStore, vectorStore, distiller)
 
 	pool := agent.NewPool(
-		func(ctx context.Context, userID string) (*agent.Agent, error) {
+		func(ctx context.Context, userID string, history []*schema.Message) (*agent.Agent, error) {
 			memCtx, _ := fileStore.AllAsContext(ctx, userID)
-			return agent.New(ctx, cfg, agent.WithMemoryContext(memCtx))
+			return agent.New(ctx, cfg, agent.WithMemoryContext(memCtx), agent.WithInitialHistory(history))
 		},
 		time.Duration(cfg.SessionTimeoutMinutes)*time.Minute,
 		sweeper.OnDestroy,
+		agent.WithSessionProvider(sessions, cfg.ConversationHistoryWindowSize),
 		agent.WithRecordHook(func(userID, sessionID, role, content string) {
 			if err := sessions.Append(userID, sessionID, role, content); err != nil {
 				slog.Warn("session record failed", "err", err)
@@ -70,7 +72,9 @@ func run() error {
 
 	result := runPlatform(ctx, pool, cli.New())
 	slog.Info("shutting down")
-	pool.Shutdown(context.Background())
+	if err := pool.Shutdown(context.Background()); err != nil {
+		slog.Error("shutdown completed with errors", "err", err)
+	}
 	return result
 }
 

@@ -33,6 +33,7 @@ func TestLoad_defaults(t *testing.T) {
 	t.Setenv("OPENAI_MODEL", "")
 	t.Setenv("OLLAMA_BASE_URL", "")
 	t.Setenv("SESSION_TIMEOUT_MINUTES", "")
+	t.Setenv("CONVERSATION_HISTORY_WINDOW_SIZE", "")
 
 	cfg, err := Load()
 
@@ -40,6 +41,7 @@ func TestLoad_defaults(t *testing.T) {
 	assert.Equal(t, "gpt-5.5", cfg.OpenAIModel)
 	assert.Equal(t, "http://localhost:11434/api", cfg.OllamaBaseURL)
 	assert.Equal(t, 30, cfg.SessionTimeoutMinutes)
+	assert.Equal(t, 20, cfg.ConversationHistoryWindowSize)
 }
 
 func TestLoad_customValues(t *testing.T) {

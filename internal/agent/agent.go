@@ -25,6 +25,10 @@ func WithMemoryContext(ctx string) Option {
 	return func(a *Agent) { a.memoryContext = ctx }
 }
 
+func WithInitialHistory(msgs []*schema.Message) Option {
+	return func(a *Agent) { a.history.log = append(a.history.log, msgs...) }
+}
+
 type Agent struct {
 	react         generator
 	toolOpts      []agent.AgentOption

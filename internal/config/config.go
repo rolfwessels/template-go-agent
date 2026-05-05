@@ -9,11 +9,12 @@ import (
 )
 
 type Config struct {
-	OpenAIAPIKey           string
-	OpenAIModel            string
-	TavilyAPIKey           string
-	OllamaBaseURL          string
-	SessionTimeoutMinutes  int
+	OpenAIAPIKey                  string
+	OpenAIModel                   string
+	TavilyAPIKey                  string
+	OllamaBaseURL                 string
+	SessionTimeoutMinutes         int
+	ConversationHistoryWindowSize int
 }
 
 func Load() (*Config, error) {
@@ -24,7 +25,8 @@ func Load() (*Config, error) {
 		OpenAIModel:           envOrDefault("OPENAI_MODEL", "gpt-5.5"),
 		TavilyAPIKey:          os.Getenv("TAVILY_API_KEY"),
 		OllamaBaseURL:         envOrDefault("OLLAMA_BASE_URL", "http://localhost:11434/api"),
-		SessionTimeoutMinutes: envIntOrDefault("SESSION_TIMEOUT_MINUTES", 30),
+		SessionTimeoutMinutes:         envIntOrDefault("SESSION_TIMEOUT_MINUTES", 30),
+		ConversationHistoryWindowSize: envIntOrDefault("CONVERSATION_HISTORY_WINDOW_SIZE", 20),
 	}
 
 	if err := cfg.validate(); err != nil {

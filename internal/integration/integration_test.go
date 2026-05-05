@@ -66,9 +66,9 @@ func newTestPool(t *testing.T, dir string, distillerFacts []string, timeout time
 	sweeper := memory.NewSweeper(fileStore, nil, &stubDistiller{facts: distillerFacts})
 
 	pool := agent.NewPool(
-		func(ctx context.Context, userID string) (*agent.Agent, error) {
+		func(ctx context.Context, userID string, history []*schema.Message) (*agent.Agent, error) {
 			memCtx, _ := fileStore.AllAsContext(ctx, userID)
-			return agent.NewWithGenerator(makeGen(), "base-prompt", agent.WithMemoryContext(memCtx)), nil
+			return agent.NewWithGenerator(makeGen(), "base-prompt", agent.WithMemoryContext(memCtx), agent.WithInitialHistory(history)), nil
 		},
 		timeout,
 		sweeper.OnDestroy,
@@ -80,7 +80,7 @@ func TestIntegration_MultiTurnPreservesContext(t *testing.T) {
 	// arrange
 	gen := &spyGenerator{response: "ok"}
 	pool := agent.NewPool(
-		func(_ context.Context, _ string) (*agent.Agent, error) {
+		func(_ context.Context, _ string, _ []*schema.Message) (*agent.Agent, error) {
 			return agent.NewWithGenerator(gen, "sys"), nil
 		},
 		time.Minute,
@@ -132,7 +132,7 @@ func TestIntegration_ShutdownTriggersSweepForAllAgents(t *testing.T) {
 	// act — two different users, then shutdown
 	_, _ = pool.Send(ctx, "user1", "hello")
 	_, _ = pool.Send(ctx, "user2", "hello")
-	pool.Shutdown(ctx)
+	require.NoError(t, pool.Shutdown(ctx))
 
 	// assert — both users have memory files
 	e1, _ := fileStore.All(ctx, "user1")

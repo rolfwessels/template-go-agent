@@ -39,7 +39,8 @@ Copy `.env.example` to `.env` and fill in:
 | `OPENAI_MODEL` | | `gpt-5.5` | Model to use |
 | `TAVILY_API_KEY` | ✅ | — | Tavily search API key |
 | `OLLAMA_BASE_URL` | | `http://localhost:11434/api` | Ollama API endpoint (set automatically in docker-compose) |
-| `SESSION_TIMEOUT_MINUTES` | | `30` | Inactivity timeout |
+| `SESSION_TIMEOUT_MINUTES` | | `30` | Inactivity timeout before agent eviction |
+| `CONVERSATION_HISTORY_WINDOW_SIZE` | | `20` | Messages reloaded from Session Log on agent recreation |
 
 ## 🚀 Getting started with development
 

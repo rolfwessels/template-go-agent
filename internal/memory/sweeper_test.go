@@ -31,7 +31,7 @@ func TestSweeper_WritesMarkdownFilesOnDestroy(t *testing.T) {
 	}
 
 	// act
-	sweeper.OnDestroy(context.Background(), "alice", "sess-1", messages)
+	require.NoError(t, sweeper.OnDestroy(context.Background(), "alice", "sess-1", messages))
 
 	// assert
 	entries, err := os.ReadDir(filepath.Join(dir, "alice"))
@@ -49,7 +49,7 @@ func TestSweeper_CallsVectorStoreForEachFact(t *testing.T) {
 	messages := []*schema.Message{schema.UserMessage("msg")}
 
 	// act
-	sweeper.OnDestroy(context.Background(), "bob", "sess-1", messages)
+	require.NoError(t, sweeper.OnDestroy(context.Background(), "bob", "sess-1", messages))
 
 	// assert
 	assert.Len(t, vs.added, 2)
@@ -80,6 +80,6 @@ func TestSweeper_SkipsVectorWhenNil(t *testing.T) {
 
 	// act — should not panic
 	assert.NotPanics(t, func() {
-		sweeper.OnDestroy(context.Background(), "dave", "sess-1", messages)
+		require.NoError(t, sweeper.OnDestroy(context.Background(), "dave", "sess-1", messages))
 	})
 }

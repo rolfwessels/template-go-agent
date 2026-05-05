@@ -23,15 +23,18 @@ func NewSweeper(store *FileStore, vector VectorStore, distiller Distiller) *Swee
 	return &Sweeper{store: store, vector: vector, distiller: distiller}
 }
 
-func (s *Sweeper) OnDestroy(ctx context.Context, userID, sessionID string, messages []*schema.Message) {
+func (s *Sweeper) OnDestroy(ctx context.Context, userID, sessionID string, messages []*schema.Message) error {
 	if len(messages) == 0 {
-		return
+		return nil
 	}
 	slog.Info("memory sweep started", "userID", userID, "sessionID", sessionID, "messages", len(messages))
 	facts, err := s.distiller.Distill(ctx, messages)
-	if err != nil || len(facts) == 0 {
+	if err != nil {
+		return fmt.Errorf("distilling memories for %s: %w", userID, err)
+	}
+	if len(facts) == 0 {
 		slog.Info("memory sweep complete", "userID", userID, "facts", 0)
-		return
+		return nil
 	}
 	slog.Info("memory sweep complete", "userID", userID, "facts", len(facts))
 	for i, fact := range facts {
@@ -49,4 +52,5 @@ func (s *Sweeper) OnDestroy(ctx context.Context, userID, sessionID string, messa
 			_ = s.vector.Add(ctx, e)
 		}
 	}
+	return nil
 }
