@@ -55,14 +55,22 @@ func run() error {
 
 	sweeper := memory.NewSweeper(fileStore, vectorStore, distiller, sessions)
 
-	pool := agent.NewPool(
+	var pool *agent.AgentPool
+	pool = agent.NewPool(
 		func(ctx context.Context, userID string, history []*schema.Message) (*agent.Agent, error) {
 			memCtx, _ := fileStore.AllAsContext(ctx, userID)
-			return agent.New(ctx, cfg, agent.WithMemoryContext(memCtx), agent.WithInitialHistory(history))
+			return agent.New(ctx, cfg,
+				agent.WithMemoryContext(memCtx),
+				agent.WithInitialHistory(history),
+				agent.WithResetCallback(func(ctx context.Context) error {
+					return pool.Reset(ctx, userID)
+				}),
+			)
 		},
 		time.Duration(cfg.SessionTimeoutMinutes)*time.Minute,
 		sweeper.OnDestroy,
 		agent.WithSessionProvider(sessions, cfg.ConversationHistoryWindowSize),
+		agent.WithSessionCreator(sessions),
 		agent.WithRecordHook(func(userID, sessionID, role, content string) {
 			if err := sessions.Append(userID, sessionID, role, content); err != nil {
 				slog.Warn("session record failed", "err", err)

@@ -168,6 +168,19 @@ func (s *SessionStore) ReadFrom(userID, sessionID string, fromLine int) ([]*sche
 	return msgs, total, nil
 }
 
+func (s *SessionStore) NewSession(userID string) (string, error) {
+	sessDir := filepath.Join(s.dir, userID, "sessions")
+	if err := os.MkdirAll(sessDir, 0750); err != nil {
+		return "", fmt.Errorf("creating session dir: %w", err)
+	}
+	id := newSessionID()
+	f, err := os.OpenFile(filepath.Join(sessDir, id+".jsonl"), os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return "", fmt.Errorf("creating new session file: %w", err)
+	}
+	return id, f.Close()
+}
+
 func newSessionID() string {
 	return fmt.Sprintf("%019d", time.Now().UnixNano())
 }

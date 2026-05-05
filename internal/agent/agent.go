@@ -6,6 +6,7 @@ import (
 	"os"
 
 	einoopenai "github.com/cloudwego/eino-ext/components/model/openai"
+	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/flow/agent"
 	"github.com/cloudwego/eino/flow/agent/react"
 	"github.com/cloudwego/eino/schema"
@@ -29,12 +30,17 @@ func WithInitialHistory(msgs []*schema.Message) Option {
 	return func(a *Agent) { a.history.log = append(a.history.log, msgs...) }
 }
 
+func WithResetCallback(cb func(ctx context.Context) error) Option {
+	return func(a *Agent) { a.resetCallback = cb }
+}
+
 type Agent struct {
 	react         generator
 	toolOpts      []agent.AgentOption
 	systemPrompt  string
 	memoryContext string
 	history       ConversationHistory
+	resetCallback func(ctx context.Context) error
 }
 
 func NewWithGenerator(gen Generator, systemPrompt string, opts ...Option) *Agent {
@@ -46,6 +52,11 @@ func NewWithGenerator(gen Generator, systemPrompt string, opts ...Option) *Agent
 }
 
 func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error) {
+	a := &Agent{}
+	for _, opt := range opts {
+		opt(a)
+	}
+
 	model, err := einoopenai.NewChatModel(ctx, &einoopenai.ChatModelConfig{
 		APIKey: cfg.OpenAIAPIKey,
 		Model:  cfg.OpenAIModel,
@@ -54,9 +65,12 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 		return nil, fmt.Errorf("creating chat model: %w", err)
 	}
 
-	tavily := newTavilyTool(cfg.TavilyAPIKey)
+	tools := []tool.BaseTool{newTavilyTool(cfg.TavilyAPIKey)}
+	if a.resetCallback != nil {
+		tools = append(tools, newNewSessionTool(a.resetCallback))
+	}
 
-	toolOpts, err := react.WithTools(ctx, tavily)
+	toolOpts, err := react.WithTools(ctx, tools...)
 	if err != nil {
 		return nil, fmt.Errorf("configuring tools: %w", err)
 	}
@@ -73,10 +87,9 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 		return nil, err
 	}
 
-	a := &Agent{react: ra, toolOpts: toolOpts, systemPrompt: systemPrompt}
-	for _, opt := range opts {
-		opt(a)
-	}
+	a.react = ra
+	a.toolOpts = toolOpts
+	a.systemPrompt = systemPrompt
 	return a, nil
 }
 

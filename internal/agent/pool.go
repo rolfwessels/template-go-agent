@@ -20,6 +20,10 @@ type SessionProvider interface {
 	LoadSession(userID string, windowSize int) (sessionID string, history []*schema.Message, err error)
 }
 
+type SessionCreator interface {
+	NewSession(userID string) (string, error)
+}
+
 type poolEntry struct {
 	agent     *Agent
 	timer     *time.Timer
@@ -27,14 +31,15 @@ type poolEntry struct {
 }
 
 type AgentPool struct {
-	mu         sync.Mutex
-	agents     map[string]*poolEntry
-	factory    AgentFactory
-	timeout    time.Duration
-	hook       DestroyHook
-	recorder   RecordHook
-	sessions   SessionProvider
-	windowSize int
+	mu             sync.Mutex
+	agents         map[string]*poolEntry
+	factory        AgentFactory
+	timeout        time.Duration
+	hook           DestroyHook
+	recorder       RecordHook
+	sessions       SessionProvider
+	sessionCreator SessionCreator
+	windowSize     int
 }
 
 func WithRecordHook(h RecordHook) func(*AgentPool) {
@@ -46,6 +51,10 @@ func WithSessionProvider(sp SessionProvider, windowSize int) func(*AgentPool) {
 		p.sessions = sp
 		p.windowSize = windowSize
 	}
+}
+
+func WithSessionCreator(sc SessionCreator) func(*AgentPool) {
+	return func(p *AgentPool) { p.sessionCreator = sc }
 }
 
 func NewPool(factory AgentFactory, timeout time.Duration, hook DestroyHook, opts ...func(*AgentPool)) *AgentPool {
@@ -107,6 +116,30 @@ func (p *AgentPool) Shutdown(ctx context.Context) error {
 	}
 	wg.Wait()
 	return errors.Join(errs...)
+}
+
+func (p *AgentPool) Reset(ctx context.Context, userID string) error {
+	p.mu.Lock()
+	e, ok := p.agents[userID]
+	if !ok {
+		p.mu.Unlock()
+		return nil
+	}
+	delete(p.agents, userID)
+	p.mu.Unlock()
+
+	e.timer.Stop()
+	slog.Info("session reset started", "userID", userID, "sessionID", e.sessionID)
+	if err := p.callHook(ctx, userID, e.sessionID, e.agent.history.all()); err != nil {
+		return fmt.Errorf("sweeping session on reset: %w", err)
+	}
+	if p.sessionCreator != nil {
+		if _, err := p.sessionCreator.NewSession(userID); err != nil {
+			return fmt.Errorf("creating new session: %w", err)
+		}
+	}
+	slog.Info("session reset complete", "userID", userID, "oldSessionID", e.sessionID)
+	return nil
 }
 
 func (p *AgentPool) getOrCreate(ctx context.Context, userID string) (*poolEntry, error) {

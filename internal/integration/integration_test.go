@@ -77,6 +77,7 @@ func newTestPool(t *testing.T, dir string, distillerFacts []string, timeout time
 			_ = sessions.Append(userID, sessionID, role, content)
 		}),
 		agent.WithSessionProvider(sessions, 20),
+		agent.WithSessionCreator(sessions),
 	)
 	return pool, fileStore
 }
@@ -182,4 +183,53 @@ func TestIntegration_MemoryFromPreviousSessionInjectedInNext(t *testing.T) {
 		strings.Contains(session2Prompt, "user's favourite language is Go"),
 		"session 2 system prompt should contain memory from session 1, got: %q", session2Prompt,
 	)
+}
+
+func TestIntegration_SessionResetClearsHistoryAndPreservesLongTermMemory(t *testing.T) {
+	// arrange
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	var mu sync.Mutex
+	var gens []*spyGenerator
+	makeGen := func() *spyGenerator {
+		g := &spyGenerator{response: "ok"}
+		mu.Lock()
+		gens = append(gens, g)
+		mu.Unlock()
+		return g
+	}
+
+	pool, _ := newTestPool(t, dir, []string{"user likes cats"}, time.Minute, makeGen)
+
+	// act — build up some conversation history
+	_, err := pool.Send(ctx, "carol", "I love cats")
+	require.NoError(t, err)
+	_, err = pool.Send(ctx, "carol", "cats are the best")
+	require.NoError(t, err)
+
+	// simulate new_session tool invocation
+	require.NoError(t, pool.Reset(ctx, "carol"))
+
+	// first message in the new session
+	_, err = pool.Send(ctx, "carol", "hello again")
+	require.NoError(t, err)
+
+	// assert — two agents were created: one before reset, one after
+	mu.Lock()
+	require.Len(t, gens, 2, "should have created two agents (before and after reset)")
+	gen2 := gens[1]
+	mu.Unlock()
+
+	gen2.mu.Lock()
+	calls := gen2.calls
+	gen2.mu.Unlock()
+
+	// after reset the agent starts fresh: system + current user message only (no prior history)
+	require.Len(t, calls, 1, "second agent should have received exactly one call")
+	assert.Len(t, calls[0], 2, "after reset, only system prompt and new user message expected")
+
+	// long-term memory distilled from the swept session should appear in the system prompt
+	assert.Contains(t, calls[0][0].Content, "user likes cats",
+		"post-reset system prompt should contain memory swept from the previous session")
 }
