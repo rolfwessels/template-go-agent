@@ -7,17 +7,20 @@ import (
 
 	einoopenai "github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/flow/agent"
+	"github.com/cloudwego/eino/compose"
+	einoagent "github.com/cloudwego/eino/flow/agent"
 	"github.com/cloudwego/eino/flow/agent/react"
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/rolfwessels/template-go-agent/internal/config"
 )
 
-type generator = Generator
+type msgGenerator interface {
+	generate(ctx context.Context, input []*schema.Message) ([]*schema.Message, error)
+}
 
 type Generator interface {
-	Generate(ctx context.Context, input []*schema.Message, opts ...agent.AgentOption) (*schema.Message, error)
+	Generate(ctx context.Context, input []*schema.Message, opts ...einoagent.AgentOption) (*schema.Message, error)
 }
 
 type Option func(*Agent)
@@ -35,8 +38,7 @@ func WithResetCallback(cb func(ctx context.Context) error) Option {
 }
 
 type Agent struct {
-	react         generator
-	toolOpts      []agent.AgentOption
+	react         msgGenerator
 	systemPrompt  string
 	memoryContext string
 	history       ConversationHistory
@@ -44,7 +46,7 @@ type Agent struct {
 }
 
 func NewWithGenerator(gen Generator, systemPrompt string, opts ...Option) *Agent {
-	a := &Agent{react: gen, systemPrompt: systemPrompt}
+	a := &Agent{react: &singleMsgGenerator{gen: gen}, systemPrompt: systemPrompt}
 	for _, opt := range opts {
 		opt(a)
 	}
@@ -70,13 +72,9 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 		tools = append(tools, newNewSessionTool(a.resetCallback))
 	}
 
-	toolOpts, err := react.WithTools(ctx, tools...)
-	if err != nil {
-		return nil, fmt.Errorf("configuring tools: %w", err)
-	}
-
 	ra, err := react.NewAgent(ctx, &react.AgentConfig{
 		ToolCallingModel: model,
+		ToolsConfig:      compose.ToolsNodeConfig{Tools: tools},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating react agent: %w", err)
@@ -87,8 +85,7 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 		return nil, err
 	}
 
-	a.react = ra
-	a.toolOpts = toolOpts
+	a.react = &reactMsgGenerator{agent: ra}
 	a.systemPrompt = systemPrompt
 	return a, nil
 }
@@ -97,14 +94,49 @@ func (a *Agent) Generate(ctx context.Context, question string) (string, error) {
 	userMsg := schema.UserMessage(question)
 	msgs := buildMessages(a.systemPrompt, a.memoryContext, a.history.all(), userMsg)
 
-	out, err := a.react.Generate(ctx, msgs, a.toolOpts...)
+	produced, err := a.react.generate(ctx, msgs)
 	if err != nil {
 		return "", fmt.Errorf("generating response: %w", err)
 	}
 
 	a.history.append(userMsg)
-	a.history.append(out)
-	return out.Content, nil
+	for _, msg := range produced {
+		a.history.append(msg)
+	}
+	return produced[len(produced)-1].Content, nil
+}
+
+type reactMsgGenerator struct {
+	agent *react.Agent
+}
+
+func (r *reactMsgGenerator) generate(ctx context.Context, input []*schema.Message) ([]*schema.Message, error) {
+	msgFutureOpt, msgFuture := react.WithMessageFuture()
+	_, err := r.agent.Generate(ctx, input, msgFutureOpt)
+	if err != nil {
+		return nil, err
+	}
+	var msgs []*schema.Message
+	iter := msgFuture.GetMessages()
+	for msg, ok, iterErr := iter.Next(); ok; msg, ok, iterErr = iter.Next() {
+		if iterErr != nil {
+			return nil, iterErr
+		}
+		msgs = append(msgs, msg)
+	}
+	return msgs, nil
+}
+
+type singleMsgGenerator struct {
+	gen Generator
+}
+
+func (s *singleMsgGenerator) generate(ctx context.Context, input []*schema.Message) ([]*schema.Message, error) {
+	msg, err := s.gen.Generate(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	return []*schema.Message{msg}, nil
 }
 
 func buildMessages(systemPrompt, memoryContext string, history []*schema.Message, userMsg *schema.Message) []*schema.Message {

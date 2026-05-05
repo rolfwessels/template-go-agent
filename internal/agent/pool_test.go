@@ -22,7 +22,7 @@ func (f *fakeSessionProvider) LoadSession(_ string, _ int) (string, []*schema.Me
 
 func stubFactory() AgentFactory {
 	return func(_ context.Context, _ string, _ []*schema.Message) (*Agent, error) {
-		return &Agent{react: &fakeGenerator{response: "ok"}, systemPrompt: "sys"}, nil
+		return &Agent{react: newFakeGenerator("ok"), systemPrompt: "sys"}, nil
 	}
 }
 
@@ -33,7 +33,7 @@ func TestAgentPool_IsolatedHistories(t *testing.T) {
 		created []*Agent
 	)
 	factory := func(_ context.Context, _ string, _ []*schema.Message) (*Agent, error) {
-		a := &Agent{react: &fakeGenerator{response: "ok"}, systemPrompt: "sys"}
+		a := &Agent{react: newFakeGenerator("ok"), systemPrompt: "sys"}
 		mu.Lock()
 		created = append(created, a)
 		mu.Unlock()
@@ -63,7 +63,7 @@ func TestAgentPool_TimeoutCreatesNewAgent(t *testing.T) {
 	var count int
 	factory := func(_ context.Context, _ string, _ []*schema.Message) (*Agent, error) {
 		count++
-		return &Agent{react: &fakeGenerator{response: "ok"}, systemPrompt: "sys"}, nil
+		return &Agent{react: newFakeGenerator("ok"), systemPrompt: "sys"}, nil
 	}
 	pool := NewPool(factory, 20*time.Millisecond, nil)
 	ctx := context.Background()
@@ -180,7 +180,7 @@ func TestAgentPool_RecreatedAgentLoadsHistory(t *testing.T) {
 		factoryCount++
 		capturedHist = h
 		mu.Unlock()
-		return &Agent{react: &fakeGenerator{response: "ok"}, systemPrompt: "sys"}, nil
+		return &Agent{react: newFakeGenerator("ok"), systemPrompt: "sys"}, nil
 	}
 	pool := NewPool(factory, 20*time.Millisecond, nil, WithSessionProvider(sp, 20))
 	ctx := context.Background()

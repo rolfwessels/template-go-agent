@@ -6,29 +6,32 @@ import (
 	"path/filepath"
 	"testing"
 
-	einoagent "github.com/cloudwego/eino/flow/agent"
 	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type fakeGenerator struct {
-	response   string
+	msgs       []*schema.Message
 	onGenerate func([]*schema.Message)
 }
 
-func (f *fakeGenerator) Generate(_ context.Context, input []*schema.Message, _ ...einoagent.AgentOption) (*schema.Message, error) {
+func (f *fakeGenerator) generate(_ context.Context, input []*schema.Message) ([]*schema.Message, error) {
 	if f.onGenerate != nil {
 		f.onGenerate(input)
 	}
-	return &schema.Message{Role: schema.Assistant, Content: f.response}, nil
+	return f.msgs, nil
+}
+
+func newFakeGenerator(response string) *fakeGenerator {
+	return &fakeGenerator{msgs: []*schema.Message{{Role: schema.Assistant, Content: response}}}
 }
 
 func TestGenerate_MemoryContextInSystemPrompt(t *testing.T) {
 	// arrange
 	var capturedSystem string
 	gen := &fakeGenerator{
-		response: "ok",
+		msgs: []*schema.Message{{Role: schema.Assistant, Content: "ok"}},
 		onGenerate: func(msgs []*schema.Message) {
 			capturedSystem = msgs[0].Content
 		},
@@ -60,7 +63,7 @@ func TestGenerate_PassesFullHistory(t *testing.T) {
 			// arrange
 			var lastInput []*schema.Message
 			gen := &fakeGenerator{
-				response: "ok",
+				msgs: []*schema.Message{{Role: schema.Assistant, Content: "ok"}},
 				onGenerate: func(msgs []*schema.Message) {
 					lastInput = msgs
 				},
@@ -77,6 +80,30 @@ func TestGenerate_PassesFullHistory(t *testing.T) {
 			assert.Len(t, lastInput, tt.wantLastMsgCount)
 		})
 	}
+}
+
+func TestGenerate_AllProducedMessagesStoredInHistory(t *testing.T) {
+	// arrange
+	toolCallMsg := &schema.Message{Role: schema.Assistant, ToolCalls: []schema.ToolCall{{ID: "c1"}}}
+	toolResultMsg := &schema.Message{Role: schema.Tool, ToolCallID: "c1", Content: "result"}
+	finalMsg := &schema.Message{Role: schema.Assistant, Content: "done"}
+
+	gen := &fakeGenerator{msgs: []*schema.Message{toolCallMsg, toolResultMsg, finalMsg}}
+	a := &Agent{react: gen, systemPrompt: "sys"}
+
+	// act
+	reply, err := a.Generate(context.Background(), "use a tool")
+
+	// assert
+	require.NoError(t, err)
+	assert.Equal(t, "done", reply)
+	history := a.history.all()
+	require.Len(t, history, 4) // user + tool-call + tool-result + final
+	assert.Equal(t, schema.User, history[0].Role)
+	assert.Equal(t, schema.Assistant, history[1].Role)
+	assert.Equal(t, schema.Tool, history[2].Role)
+	assert.Equal(t, schema.Assistant, history[3].Role)
+	assert.Equal(t, "done", history[3].Content)
 }
 
 func TestLoadPrompts_MissingSoul(t *testing.T) {
