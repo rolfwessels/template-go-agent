@@ -1,4 +1,12 @@
 services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: template-go-agent-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - template-go-agent-ollama:/root/.ollama
+
   dev:
     container_name: template-go-agent-dev
     build:
@@ -27,3 +35,4 @@ volumes:
   template-go-agent-cache:
   template-go-agent-gocache:
   template-go-agent-gomod:
+  template-go-agent-ollama:

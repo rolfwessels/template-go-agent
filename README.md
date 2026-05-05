@@ -3,20 +3,43 @@
 [![GitHub release](https://img.shields.io/github/v/release/rolfwessels/template-go-agent)](https://github.com/rolfwessels/template-go-agent/releases)
 [![Go CI](https://github.com/rolfwessels/template-go-agent/actions/workflows/github-action.yml/badge.svg)](https://github.com/rolfwessels/template-go-agent/actions)
 
-A short description of what template-go-agent does.
+A Go template for hybrid AI agents — conversational at the surface, with autonomous multi-step tool execution within a single user turn. Powered by [Eino](https://github.com/cloudwego/eino) (ReAct loop), OpenAI, and Tavily web search.
 
 ## ✨ How it works
 
-A short explanation of how the tool works.
+The agent reads a question from stdin, runs a ReAct reasoning loop (calling web search via Tavily as needed), and prints a grounded answer.
 
 ```bash
-template-go-agent --help
+# copy and populate env vars
+cp .env.example .env
+$EDITOR .env
+
+# start the agent (inside the dev container)
+make start
 ```
+
+Type a question and press Enter. `Ctrl+C` to quit.
 
 ## 📦 Technology
 
+- [Eino](https://github.com/cloudwego/eino) — ReAct agent loop and OpenAI provider
+- [Tavily](https://tavily.com) — web search tool
+- [chromem-go](https://github.com/philippgille/chromem-go) — embedded vector store for long-term memory (upcoming)
+- [Ollama](https://ollama.com) — local embeddings via docker-compose
 - Docker for the dev environment
 - MakeFile because it just works!
+
+## 🔑 Environment variables
+
+Copy `.env.example` to `.env` and fill in:
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `OPENAI_API_KEY` | ✅ | — | OpenAI API key |
+| `OPENAI_MODEL` | | `gpt-5.5` | Model to use |
+| `TAVILY_API_KEY` | ✅ | — | Tavily search API key |
+| `OLLAMA_BASE_URL` | | `http://localhost:11434` | Ollama endpoint |
+| `SESSION_TIMEOUT_MINUTES` | | `30` | Inactivity timeout |
 
 ## 🚀 Getting started with development
 
