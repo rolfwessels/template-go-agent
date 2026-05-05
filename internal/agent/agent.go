@@ -13,10 +13,15 @@ import (
 	"github.com/rolfwessels/template-go-agent/internal/config"
 )
 
+type generator interface {
+	Generate(ctx context.Context, input []*schema.Message, opts ...agent.AgentOption) (*schema.Message, error)
+}
+
 type Agent struct {
-	react        *react.Agent
+	react        generator
 	toolOpts     []agent.AgentOption
 	systemPrompt string
+	history      ConversationHistory
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Agent, error) {
@@ -51,15 +56,25 @@ func New(ctx context.Context, cfg *config.Config) (*Agent, error) {
 }
 
 func (a *Agent) Generate(ctx context.Context, question string) (string, error) {
-	msgs := []*schema.Message{
-		schema.SystemMessage(a.systemPrompt),
-		schema.UserMessage(question),
-	}
+	userMsg := schema.UserMessage(question)
+	msgs := buildMessages(a.systemPrompt, a.history.all(), userMsg)
+
 	out, err := a.react.Generate(ctx, msgs, a.toolOpts...)
 	if err != nil {
 		return "", fmt.Errorf("generating response: %w", err)
 	}
+
+	a.history.append(userMsg)
+	a.history.append(out)
 	return out.Content, nil
+}
+
+func buildMessages(systemPrompt string, history []*schema.Message, userMsg *schema.Message) []*schema.Message {
+	msgs := make([]*schema.Message, 0, 1+len(history)+1)
+	msgs = append(msgs, schema.SystemMessage(systemPrompt))
+	msgs = append(msgs, history...)
+	msgs = append(msgs, userMsg)
+	return msgs
 }
 
 func loadPrompts(soulPath, instructionsPath string) (string, error) {
