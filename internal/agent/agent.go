@@ -17,14 +17,21 @@ type generator interface {
 	Generate(ctx context.Context, input []*schema.Message, opts ...agent.AgentOption) (*schema.Message, error)
 }
 
-type Agent struct {
-	react        generator
-	toolOpts     []agent.AgentOption
-	systemPrompt string
-	history      ConversationHistory
+type Option func(*Agent)
+
+func WithMemoryContext(ctx string) Option {
+	return func(a *Agent) { a.memoryContext = ctx }
 }
 
-func New(ctx context.Context, cfg *config.Config) (*Agent, error) {
+type Agent struct {
+	react         generator
+	toolOpts      []agent.AgentOption
+	systemPrompt  string
+	memoryContext string
+	history       ConversationHistory
+}
+
+func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error) {
 	model, err := einoopenai.NewChatModel(ctx, &einoopenai.ChatModelConfig{
 		APIKey: cfg.OpenAIAPIKey,
 		Model:  cfg.OpenAIModel,
@@ -52,12 +59,16 @@ func New(ctx context.Context, cfg *config.Config) (*Agent, error) {
 		return nil, err
 	}
 
-	return &Agent{react: ra, toolOpts: toolOpts, systemPrompt: systemPrompt}, nil
+	a := &Agent{react: ra, toolOpts: toolOpts, systemPrompt: systemPrompt}
+	for _, opt := range opts {
+		opt(a)
+	}
+	return a, nil
 }
 
 func (a *Agent) Generate(ctx context.Context, question string) (string, error) {
 	userMsg := schema.UserMessage(question)
-	msgs := buildMessages(a.systemPrompt, a.history.all(), userMsg)
+	msgs := buildMessages(a.systemPrompt, a.memoryContext, a.history.all(), userMsg)
 
 	out, err := a.react.Generate(ctx, msgs, a.toolOpts...)
 	if err != nil {
@@ -69,9 +80,13 @@ func (a *Agent) Generate(ctx context.Context, question string) (string, error) {
 	return out.Content, nil
 }
 
-func buildMessages(systemPrompt string, history []*schema.Message, userMsg *schema.Message) []*schema.Message {
+func buildMessages(systemPrompt, memoryContext string, history []*schema.Message, userMsg *schema.Message) []*schema.Message {
+	prompt := systemPrompt
+	if memoryContext != "" {
+		prompt += "\n\n## Recalled memories\n" + memoryContext
+	}
 	msgs := make([]*schema.Message, 0, 1+len(history)+1)
-	msgs = append(msgs, schema.SystemMessage(systemPrompt))
+	msgs = append(msgs, schema.SystemMessage(prompt))
 	msgs = append(msgs, history...)
 	msgs = append(msgs, userMsg)
 	return msgs

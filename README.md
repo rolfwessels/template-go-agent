@@ -24,7 +24,7 @@ Type a question and press Enter. `Ctrl+C` to quit.
 
 - [Eino](https://github.com/cloudwego/eino) — ReAct agent loop and OpenAI provider
 - [Tavily](https://tavily.com) — web search tool
-- [chromem-go](https://github.com/philippgille/chromem-go) — embedded vector store for long-term memory (upcoming)
+- [chromem-go](https://github.com/philippgille/chromem-go) — embedded vector store for long-term memory
 - [Ollama](https://ollama.com) — local embeddings via docker-compose
 - Docker for the dev environment
 - MakeFile because it just works!
@@ -38,7 +38,7 @@ Copy `.env.example` to `.env` and fill in:
 | `OPENAI_API_KEY` | ✅ | — | OpenAI API key |
 | `OPENAI_MODEL` | | `gpt-5.5` | Model to use |
 | `TAVILY_API_KEY` | ✅ | — | Tavily search API key |
-| `OLLAMA_BASE_URL` | | `http://localhost:11434` | Ollama endpoint |
+| `OLLAMA_BASE_URL` | | `http://localhost:11434/api` | Ollama API endpoint (set automatically in docker-compose) |
 | `SESSION_TIMEOUT_MINUTES` | | `30` | Inactivity timeout |
 
 ## 🚀 Getting started with development

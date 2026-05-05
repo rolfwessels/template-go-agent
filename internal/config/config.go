@@ -23,7 +23,7 @@ func Load() (*Config, error) {
 		OpenAIAPIKey:          os.Getenv("OPENAI_API_KEY"),
 		OpenAIModel:           envOrDefault("OPENAI_MODEL", "gpt-5.5"),
 		TavilyAPIKey:          os.Getenv("TAVILY_API_KEY"),
-		OllamaBaseURL:         envOrDefault("OLLAMA_BASE_URL", "http://localhost:11434"),
+		OllamaBaseURL:         envOrDefault("OLLAMA_BASE_URL", "http://localhost:11434/api"),
 		SessionTimeoutMinutes: envIntOrDefault("SESSION_TIMEOUT_MINUTES", 30),
 	}
 

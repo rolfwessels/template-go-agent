@@ -24,6 +24,26 @@ func (f *fakeGenerator) Generate(_ context.Context, input []*schema.Message, _ .
 	return &schema.Message{Role: schema.Assistant, Content: f.response}, nil
 }
 
+func TestGenerate_MemoryContextInSystemPrompt(t *testing.T) {
+	// arrange
+	var capturedSystem string
+	gen := &fakeGenerator{
+		response: "ok",
+		onGenerate: func(msgs []*schema.Message) {
+			capturedSystem = msgs[0].Content
+		},
+	}
+	a := &Agent{react: gen, systemPrompt: "sys", memoryContext: "user likes Go"}
+
+	// act
+	_, err := a.Generate(context.Background(), "hello")
+
+	// assert
+	require.NoError(t, err)
+	assert.Contains(t, capturedSystem, "sys")
+	assert.Contains(t, capturedSystem, "user likes Go")
+}
+
 func TestGenerate_PassesFullHistory(t *testing.T) {
 	tests := []struct {
 		name             string

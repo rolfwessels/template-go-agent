@@ -6,6 +6,22 @@ services:
       - "11434:11434"
     volumes:
       - template-go-agent-ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  ollama-init:
+    image: ollama/ollama:latest
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    command: pull nomic-embed-text
+    restart: "no"
 
   dev:
     container_name: template-go-agent-dev
@@ -27,6 +43,10 @@ services:
       - GOPATH=/home/dev/go
       - GOCACHE=/home/dev/.cache/go-build
       - HISTFILE=/cache/.zsh_history
+      - OLLAMA_BASE_URL=http://ollama:11434/api
+    depends_on:
+      ollama:
+        condition: service_healthy
     entrypoint: top -b
     logging:
       driver: none

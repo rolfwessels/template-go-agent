@@ -10,6 +10,7 @@ import (
 
 	"github.com/rolfwessels/template-go-agent/internal/agent"
 	"github.com/rolfwessels/template-go-agent/internal/config"
+	"github.com/rolfwessels/template-go-agent/internal/memory"
 	"github.com/rolfwessels/template-go-agent/internal/platform"
 	"github.com/rolfwessels/template-go-agent/internal/platform/cli"
 )
@@ -29,15 +30,27 @@ func run() error {
 		return err
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGHUP, os.Interrupt)
 	defer stop()
 
+	fileStore := memory.NewFileStore("memory")
+
+	distiller, err := memory.NewLLMDistiller(ctx, cfg.OpenAIAPIKey, cfg.OpenAIModel)
+	if err != nil {
+		return fmt.Errorf("creating distiller: %w", err)
+	}
+
+	vectorStore := memory.NewChromemStoreOrWarn(ctx, cfg.OllamaBaseURL, "memory")
+
+	sweeper := memory.NewSweeper(fileStore, vectorStore, distiller)
+
 	pool := agent.NewPool(
-		func(ctx context.Context) (*agent.Agent, error) {
-			return agent.New(ctx, cfg)
+		func(ctx context.Context, userID string) (*agent.Agent, error) {
+			memCtx, _ := fileStore.AllAsContext(ctx, userID)
+			return agent.New(ctx, cfg, agent.WithMemoryContext(memCtx))
 		},
 		time.Duration(cfg.SessionTimeoutMinutes)*time.Minute,
-		nil,
+		sweeper.OnDestroy,
 	)
 
 	result := runPlatform(ctx, pool, cli.New())

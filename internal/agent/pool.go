@@ -4,11 +4,13 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/cloudwego/eino/schema"
 )
 
-type DestroyHook func(ctx context.Context, userID string, history *ConversationHistory)
+type DestroyHook func(ctx context.Context, userID string, messages []*schema.Message)
 
-type AgentFactory func(ctx context.Context) (*Agent, error)
+type AgentFactory func(ctx context.Context, userID string) (*Agent, error)
 
 type poolEntry struct {
 	agent *Agent
@@ -57,7 +59,7 @@ func (p *AgentPool) Shutdown(ctx context.Context) {
 		go func(uid string, e *poolEntry) {
 			defer wg.Done()
 			e.timer.Stop()
-			p.callHook(ctx, uid, &e.agent.history)
+			p.callHook(ctx, uid, e.agent.history.all())
 		}(userID, entry)
 	}
 	wg.Wait()
@@ -71,7 +73,7 @@ func (p *AgentPool) getOrCreate(ctx context.Context, userID string) (*Agent, err
 		return e.agent, nil
 	}
 
-	a, err := p.factory(ctx)
+	a, err := p.factory(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -103,11 +105,11 @@ func (p *AgentPool) destroy(ctx context.Context, userID string) {
 	p.mu.Unlock()
 
 	e.timer.Stop()
-	p.callHook(ctx, userID, &e.agent.history)
+	p.callHook(ctx, userID, e.agent.history.all())
 }
 
-func (p *AgentPool) callHook(ctx context.Context, userID string, history *ConversationHistory) {
+func (p *AgentPool) callHook(ctx context.Context, userID string, messages []*schema.Message) {
 	if p.hook != nil {
-		p.hook(ctx, userID, history)
+		p.hook(ctx, userID, messages)
 	}
 }

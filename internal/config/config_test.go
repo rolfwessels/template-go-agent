@@ -38,7 +38,7 @@ func TestLoad_defaults(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "gpt-5.5", cfg.OpenAIModel)
-	assert.Equal(t, "http://localhost:11434", cfg.OllamaBaseURL)
+	assert.Equal(t, "http://localhost:11434/api", cfg.OllamaBaseURL)
 	assert.Equal(t, 30, cfg.SessionTimeoutMinutes)
 }
 

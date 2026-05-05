@@ -6,12 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func stubFactory() AgentFactory {
-	return func(_ context.Context) (*Agent, error) {
+	return func(_ context.Context, _ string) (*Agent, error) {
 		return &Agent{react: &fakeGenerator{response: "ok"}, systemPrompt: "sys"}, nil
 	}
 }
@@ -22,7 +23,7 @@ func TestAgentPool_IsolatedHistories(t *testing.T) {
 		mu      sync.Mutex
 		created []*Agent
 	)
-	factory := func(_ context.Context) (*Agent, error) {
+	factory := func(_ context.Context, _ string) (*Agent, error) {
 		a := &Agent{react: &fakeGenerator{response: "ok"}, systemPrompt: "sys"}
 		mu.Lock()
 		created = append(created, a)
@@ -51,7 +52,7 @@ func TestAgentPool_IsolatedHistories(t *testing.T) {
 func TestAgentPool_TimeoutCreatesNewAgent(t *testing.T) {
 	// arrange
 	var count int
-	factory := func(_ context.Context) (*Agent, error) {
+	factory := func(_ context.Context, _ string) (*Agent, error) {
 		count++
 		return &Agent{react: &fakeGenerator{response: "ok"}, systemPrompt: "sys"}, nil
 	}
@@ -79,7 +80,7 @@ func TestAgentPool_DestroyHookCalledOnShutdown(t *testing.T) {
 		mu        sync.Mutex
 		hookCalls []string
 	)
-	hook := func(_ context.Context, userID string, _ *ConversationHistory) {
+	hook := func(_ context.Context, userID string, _ []*schema.Message) {
 		mu.Lock()
 		hookCalls = append(hookCalls, userID)
 		mu.Unlock()
@@ -101,7 +102,7 @@ func TestAgentPool_DestroyHookCalledOnShutdown(t *testing.T) {
 func TestAgentPool_DestroyHookCalledOnTimeout(t *testing.T) {
 	// arrange
 	called := make(chan string, 1)
-	hook := func(_ context.Context, userID string, _ *ConversationHistory) {
+	hook := func(_ context.Context, userID string, _ []*schema.Message) {
 		called <- userID
 	}
 	pool := NewPool(stubFactory(), 20*time.Millisecond, hook)

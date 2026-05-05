@@ -31,6 +31,12 @@ func (a *Adapter) Connect(ctx context.Context) error {
 
 func (a *Adapter) scan(ctx context.Context) {
 	defer close(a.msgs)
+	go func() {
+		<-ctx.Done()
+		if f, ok := a.in.(*os.File); ok {
+			_ = f.Close()
+		}
+	}()
 	scanner := bufio.NewScanner(a.in)
 	for scanner.Scan() {
 		msg := strings.TrimSpace(scanner.Text())
