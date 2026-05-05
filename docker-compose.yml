@@ -1,0 +1,29 @@
+services:
+  dev:
+    container_name: template-go-agent-dev
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      target: dev
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    volumes:
+      - ".:/template-go-agent"
+      - "./zshrc:/home/dev/.zshrc"
+      - template-go-agent-cache:/cache
+      - /var/run/docker.sock:/var/run/docker.sock
+      - template-go-agent-gocache:/home/dev/.cache/go-build
+      - template-go-agent-gomod:/home/dev/go/pkg/mod
+    environment:
+      - GOPATH=/home/dev/go
+      - GOCACHE=/home/dev/.cache/go-build
+      - HISTFILE=/cache/.zsh_history
+    entrypoint: top -b
+    logging:
+      driver: none
+
+volumes:
+  template-go-agent-cache:
+  template-go-agent-gocache:
+  template-go-agent-gomod:

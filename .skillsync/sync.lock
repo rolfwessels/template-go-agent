@@ -1,0 +1,35 @@
+[[entries]]
+  bundle = "rules/go-general"
+  format = "claude"
+  target = ".claude/rules/go-general.md"
+  hash = "da6e9658667a4eddb769d4fd54cd7f7f6c1677bba97adb0b708786e7c4e5d75d"
+  registry_hash = "3f6b43ff79ec30e0c7ac1575dda61628dc973fffadcd9fe8f6918d1697e46d57"
+  local_hash = "da6e9658667a4eddb769d4fd54cd7f7f6c1677bba97adb0b708786e7c4e5d75d"
+  state = "clean"
+
+[[entries]]
+  bundle = "rules/go-naming"
+  format = "claude"
+  target = ".claude/rules/go-naming.md"
+  hash = "b80a8dd5c417e3b44894881aebd9758750d2312c3c0bb187d6ff3ac240168d27"
+  registry_hash = "d569f7efcf1e7042ddea51ecd67f6f9b353267b4add0fe633d5156c77e64c470"
+  local_hash = "b80a8dd5c417e3b44894881aebd9758750d2312c3c0bb187d6ff3ac240168d27"
+  state = "clean"
+
+[[entries]]
+  bundle = "rules/go-testing"
+  format = "claude"
+  target = ".claude/rules/go-testing.md"
+  hash = "a07ced116bc9088cf485bd61c52b24e6000110c773f03367beeee13ec9239b8a"
+  registry_hash = "3c777f42dab3e9e32dc401194f4e0387de999b907fa39906db2a24419a512584"
+  local_hash = "a07ced116bc9088cf485bd61c52b24e6000110c773f03367beeee13ec9239b8a"
+  state = "clean"
+
+[[entries]]
+  bundle = "skills/dev-container"
+  format = "claude"
+  target = ".claude/skills/dev-container/SKILL.md"
+  hash = "05a13299170c821c07b518e8470a5159622d2138bd37ff4b3b110434c66b7011"
+  registry_hash = "05a13299170c821c07b518e8470a5159622d2138bd37ff4b3b110434c66b7011"
+  local_hash = "05a13299170c821c07b518e8470a5159622d2138bd37ff4b3b110434c66b7011"
+  state = "clean"

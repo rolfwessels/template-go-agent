@@ -1,0 +1,23 @@
+.aws/
+
+# Build output
+dist/
+/template-go-console-app
+/template-go-console-app.exe
+
+# Go test / coverage
+*.test
+*.out
+coverage.html
+
+# Editor
+.vscode/settings.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets / env
+.env
+.env.*
+.scratch/

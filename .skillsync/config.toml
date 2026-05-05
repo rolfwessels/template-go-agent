@@ -1,0 +1,3 @@
+registry = "/mnt/d/Software/Dropbox/Work/Home/skillsync-reg/registry"
+formats = ["claude"]
+bundles = ["rules/go-general", "rules/go-naming", "rules/go-testing", "skills/dev-container"]
