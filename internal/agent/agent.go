@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os"
 
 	einoopenai "github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/flow/agent"
@@ -13,8 +14,9 @@ import (
 )
 
 type Agent struct {
-	react    *react.Agent
-	toolOpts []agent.AgentOption
+	react        *react.Agent
+	toolOpts     []agent.AgentOption
+	systemPrompt string
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Agent, error) {
@@ -40,14 +42,34 @@ func New(ctx context.Context, cfg *config.Config) (*Agent, error) {
 		return nil, fmt.Errorf("creating react agent: %w", err)
 	}
 
-	return &Agent{react: ra, toolOpts: toolOpts}, nil
+	systemPrompt, err := loadPrompts("prompts/soul.md", "prompts/instructions.md")
+	if err != nil {
+		return nil, err
+	}
+
+	return &Agent{react: ra, toolOpts: toolOpts, systemPrompt: systemPrompt}, nil
 }
 
 func (a *Agent) Generate(ctx context.Context, question string) (string, error) {
-	msg := schema.UserMessage(question)
-	out, err := a.react.Generate(ctx, []*schema.Message{msg}, a.toolOpts...)
+	msgs := []*schema.Message{
+		schema.SystemMessage(a.systemPrompt),
+		schema.UserMessage(question),
+	}
+	out, err := a.react.Generate(ctx, msgs, a.toolOpts...)
 	if err != nil {
 		return "", fmt.Errorf("generating response: %w", err)
 	}
 	return out.Content, nil
+}
+
+func loadPrompts(soulPath, instructionsPath string) (string, error) {
+	soul, err := os.ReadFile(soulPath)
+	if err != nil {
+		return "", fmt.Errorf("loading soul prompt: %w", err)
+	}
+	instructions, err := os.ReadFile(instructionsPath)
+	if err != nil {
+		return "", fmt.Errorf("loading instructions prompt: %w", err)
+	}
+	return string(soul) + "\n\n" + string(instructions), nil
 }

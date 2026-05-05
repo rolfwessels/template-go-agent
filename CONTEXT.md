@@ -28,6 +28,10 @@ _Avoid_: Memory (unqualified), knowledge base
 The summarization pass that runs at Session end — whether triggered by inactivity timeout or application shutdown (SIGTERM/SIGINT). Reads the Session's Conversation History, distills what is worth keeping, and writes entries to Long-term Memory.
 _Avoid_: Summarization, flush, persist
 
+**Platform Adapter**:
+Implements the `MessagePlatform` interface (`Connect`, `SendMessage`, `ReceiveMessages`, `Disconnect`). Bridges an external messaging surface (CLI, Discord, etc.) to the agent loop. Swapping adapters requires no changes to agent logic.
+_Avoid_: Connector, transport, integration
+
 **Tool**:
 A typed, callable capability registered with the agent (e.g. web search). Invoked by the LLM during the ReAct loop within a single turn.
 _Avoid_: Function, plugin, skill

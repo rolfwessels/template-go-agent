@@ -7,7 +7,7 @@ A Go template for hybrid AI agents — conversational at the surface, with auton
 
 ## ✨ How it works
 
-The agent reads a question from stdin, runs a ReAct reasoning loop (calling web search via Tavily as needed), and prints a grounded answer.
+The agent reads a question from stdin, runs a ReAct reasoning loop (calling web search via Tavily as needed), and prints a grounded answer. Its persona and instructions are loaded from `prompts/soul.md` and `prompts/instructions.md` at startup — edit those files to customise the agent's identity and behaviour.
 
 ```bash
 # copy and populate env vars
