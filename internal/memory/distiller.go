@@ -30,7 +30,10 @@ func NewLLMDistiller(ctx context.Context, apiKey, model string) (Distiller, erro
 func (d *llmDistiller) Distill(ctx context.Context, messages []*schema.Message) ([]string, error) {
 	var history strings.Builder
 	for _, m := range messages {
-		history.WriteString(string(m.Role) + ": " + m.Content + "\n")
+		if m.Role != schema.User {
+			continue
+		}
+		history.WriteString(m.Content + "\n")
 	}
 	resp, err := d.model.Generate(ctx, []*schema.Message{
 		schema.SystemMessage(distillPrompt),

@@ -80,7 +80,7 @@ func TestAgentPool_DestroyHookCalledOnShutdown(t *testing.T) {
 		mu        sync.Mutex
 		hookCalls []string
 	)
-	hook := func(_ context.Context, userID string, _ []*schema.Message) {
+	hook := func(_ context.Context, userID, _ string, _ []*schema.Message) {
 		mu.Lock()
 		hookCalls = append(hookCalls, userID)
 		mu.Unlock()
@@ -102,7 +102,7 @@ func TestAgentPool_DestroyHookCalledOnShutdown(t *testing.T) {
 func TestAgentPool_DestroyHookCalledOnTimeout(t *testing.T) {
 	// arrange
 	called := make(chan string, 1)
-	hook := func(_ context.Context, userID string, _ []*schema.Message) {
+	hook := func(_ context.Context, userID, _ string, _ []*schema.Message) {
 		called <- userID
 	}
 	pool := NewPool(stubFactory(), 20*time.Millisecond, hook)

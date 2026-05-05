@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -25,6 +26,12 @@ func main() {
 }
 
 func run() error {
+	logClose, err := initLogger(".storage/logs/app.log")
+	if err != nil {
+		return err
+	}
+	defer logClose()
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -33,14 +40,17 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGHUP, os.Interrupt)
 	defer stop()
 
-	fileStore := memory.NewFileStore("memory")
+	slog.Info("starting", "version", version)
+
+	fileStore := memory.NewFileStore(".storage/memory")
+	sessions := memory.NewSessionStore(".storage/memory")
 
 	distiller, err := memory.NewLLMDistiller(ctx, cfg.OpenAIAPIKey, cfg.OpenAIModel)
 	if err != nil {
 		return fmt.Errorf("creating distiller: %w", err)
 	}
 
-	vectorStore := memory.NewChromemStoreOrWarn(ctx, cfg.OllamaBaseURL, "memory")
+	vectorStore := memory.NewChromemStoreOrWarn(ctx, cfg.OllamaBaseURL, ".storage/memory")
 
 	sweeper := memory.NewSweeper(fileStore, vectorStore, distiller)
 
@@ -51,9 +61,15 @@ func run() error {
 		},
 		time.Duration(cfg.SessionTimeoutMinutes)*time.Minute,
 		sweeper.OnDestroy,
+		agent.WithRecordHook(func(userID, sessionID, role, content string) {
+			if err := sessions.Append(userID, sessionID, role, content); err != nil {
+				slog.Warn("session record failed", "err", err)
+			}
+		}),
 	)
 
 	result := runPlatform(ctx, pool, cli.New())
+	slog.Info("shutting down")
 	pool.Shutdown(context.Background())
 	return result
 }
@@ -83,4 +99,16 @@ func runPlatform(ctx context.Context, pool *agent.AgentPool, p platform.MessageP
 	}
 
 	return nil
+}
+
+func initLogger(path string) (func(), error) {
+	if err := os.MkdirAll(".storage/logs", 0750); err != nil {
+		return nil, fmt.Errorf("creating logs dir: %w", err)
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("opening log file: %w", err)
+	}
+	slog.SetDefault(slog.New(slog.NewJSONHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	return func() { _ = f.Close() }, nil
 }

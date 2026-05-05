@@ -2,46 +2,66 @@ package agent
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/cloudwego/eino/schema"
 )
 
-type DestroyHook func(ctx context.Context, userID string, messages []*schema.Message)
+type DestroyHook func(ctx context.Context, userID, sessionID string, messages []*schema.Message)
+type RecordHook func(userID, sessionID, role, content string)
 
 type AgentFactory func(ctx context.Context, userID string) (*Agent, error)
 
 type poolEntry struct {
-	agent *Agent
-	timer *time.Timer
+	agent     *Agent
+	timer     *time.Timer
+	sessionID string
 }
 
 type AgentPool struct {
-	mu      sync.Mutex
-	agents  map[string]*poolEntry
-	factory AgentFactory
-	timeout time.Duration
-	hook    DestroyHook
+	mu       sync.Mutex
+	agents   map[string]*poolEntry
+	factory  AgentFactory
+	timeout  time.Duration
+	hook     DestroyHook
+	recorder RecordHook
 }
 
-func NewPool(factory AgentFactory, timeout time.Duration, hook DestroyHook) *AgentPool {
-	return &AgentPool{
+func WithRecordHook(h RecordHook) func(*AgentPool) {
+	return func(p *AgentPool) { p.recorder = h }
+}
+
+func NewPool(factory AgentFactory, timeout time.Duration, hook DestroyHook, opts ...func(*AgentPool)) *AgentPool {
+	p := &AgentPool{
 		agents:  make(map[string]*poolEntry),
 		factory: factory,
 		timeout: timeout,
 		hook:    hook,
 	}
+	for _, o := range opts {
+		o(p)
+	}
+	return p
 }
 
 func (p *AgentPool) Send(ctx context.Context, userID, message string) (string, error) {
-	a, err := p.getOrCreate(ctx, userID)
+	e, err := p.getOrCreate(ctx, userID)
 	if err != nil {
 		return "", err
 	}
-	resp, err := a.Generate(ctx, message)
+	slog.Info("agent send", "userID", userID, "sessionID", e.sessionID)
+	p.record(userID, e.sessionID, "user", message)
+	resp, err := e.agent.Generate(ctx, message)
 	p.resetTimer(userID)
-	return resp, err
+	if err != nil {
+		return "", err
+	}
+	slog.Info("agent response", "userID", userID, "sessionID", e.sessionID)
+	p.record(userID, e.sessionID, "assistant", resp)
+	return resp, nil
 }
 
 func (p *AgentPool) Shutdown(ctx context.Context) {
@@ -59,18 +79,18 @@ func (p *AgentPool) Shutdown(ctx context.Context) {
 		go func(uid string, e *poolEntry) {
 			defer wg.Done()
 			e.timer.Stop()
-			p.callHook(ctx, uid, e.agent.history.all())
+			p.callHook(ctx, uid, e.sessionID, e.agent.history.all())
 		}(userID, entry)
 	}
 	wg.Wait()
 }
 
-func (p *AgentPool) getOrCreate(ctx context.Context, userID string) (*Agent, error) {
+func (p *AgentPool) getOrCreate(ctx context.Context, userID string) (*poolEntry, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if e, ok := p.agents[userID]; ok {
-		return e.agent, nil
+		return e, nil
 	}
 
 	a, err := p.factory(ctx, userID)
@@ -78,12 +98,15 @@ func (p *AgentPool) getOrCreate(ctx context.Context, userID string) (*Agent, err
 		return nil, err
 	}
 
+	sessionID := fmt.Sprintf("%d", time.Now().UnixNano())
 	timer := time.AfterFunc(p.timeout, func() {
 		p.destroy(context.Background(), userID)
 	})
 
-	p.agents[userID] = &poolEntry{agent: a, timer: timer}
-	return a, nil
+	entry := &poolEntry{agent: a, timer: timer, sessionID: sessionID}
+	p.agents[userID] = entry
+	slog.Info("agent session created", "userID", userID, "sessionID", sessionID)
+	return entry, nil
 }
 
 func (p *AgentPool) resetTimer(userID string) {
@@ -105,11 +128,18 @@ func (p *AgentPool) destroy(ctx context.Context, userID string) {
 	p.mu.Unlock()
 
 	e.timer.Stop()
-	p.callHook(ctx, userID, e.agent.history.all())
+	slog.Info("agent session destroyed", "userID", userID, "sessionID", e.sessionID)
+	p.callHook(ctx, userID, e.sessionID, e.agent.history.all())
 }
 
-func (p *AgentPool) callHook(ctx context.Context, userID string, messages []*schema.Message) {
+func (p *AgentPool) callHook(ctx context.Context, userID, sessionID string, messages []*schema.Message) {
 	if p.hook != nil {
-		p.hook(ctx, userID, messages)
+		p.hook(ctx, userID, sessionID, messages)
+	}
+}
+
+func (p *AgentPool) record(userID, sessionID, role, content string) {
+	if p.recorder != nil {
+		p.recorder(userID, sessionID, role, content)
 	}
 }

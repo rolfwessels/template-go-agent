@@ -47,9 +47,7 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-    entrypoint: top -b
-    logging:
-      driver: none
+    entrypoint: ["sh", "-c", "mkdir -p /template-go-agent/.storage/logs && touch /template-go-agent/.storage/logs/app.log && exec tail -f /template-go-agent/.storage/logs/app.log"]
 
 volumes:
   template-go-agent-cache:
