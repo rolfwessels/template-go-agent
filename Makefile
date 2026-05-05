@@ -58,7 +58,8 @@ help:
 	@echo " Service Targets (should only be run inside the docker container)"
 	@echo " - version       : Show current version number"
 	@echo " - start         : Run the $(project)"
-	@echo " - test          : Test the $(project)"
+	@echo " - vet           : Vet the $(project)"
+	@echo " - test          : Vet and test the $(project)"
 	@echo " - publish       : Publish the $(project)"
 	@echo " - install       : Symlink dist/linux-amd64/$(binary) into ~/.local/bin (run on host)"
 	@echo " - uninstall     : Remove the ~/.local/bin/$(binary) symlink (run on host)"
@@ -104,7 +105,11 @@ start:
 	@echo -e "Starting $(project)"
 	@go run ./cmd/$(binary)
 
-test:
+vet:
+	@echo -e "Vetting ${GREEN}v$(version)${NC}"
+	@go vet ./...
+
+test: vet
 	@echo -e "Testing ${GREEN}v$(version)${NC}"
 	@go test ./... -v -count=1
 

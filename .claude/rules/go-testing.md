@@ -105,8 +105,10 @@ for _, tt := range tests {
 
 ## Running Tests
 
+All Go commands must run inside the dev container — the host has no Go toolchain installed.
+
 ```bash
-go test ./...                                        # all tests
-go test ./internal/registry/...                      # single package
-go test ./internal/registry/... -run TestBundleWalker # single test
+docker compose exec dev make test                                                             # vet + all tests
+docker compose exec dev go test ./internal/registry/...                                       # single package
+docker compose exec dev go test ./internal/registry/... -run TestBundleWalker                 # single test
 ```

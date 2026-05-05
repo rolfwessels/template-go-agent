@@ -13,9 +13,9 @@ description: General Go coding practices for this project
 - Write testable code; use interface-based dependency injection
 - **DO NOT add comments** that narrate what the code does; if a comment feels necessary, refactor into a named function instead
 - `// arrange`, `// act`, `// assert` comments are acceptable inside test functions
-- **ALWAYS run tests after making changes**: `go test ./...`
-- Code must pass `go vet ./...` with no warnings; treat vet errors as build failures
-- Add new dependencies with `go get <module>`, never edit `go.mod` directly
+- **ALWAYS run tests after making changes**: `docker compose exec dev make test` (runs vet + tests inside the dev container)
+- Code must pass `make vet` with no warnings; `make test` runs vet first as a prerequisite
+- Add new dependencies with `docker compose exec dev go get <module>`, never edit `go.mod` directly
 - Prefer explicit error handling over panics; always wrap errors with context using `fmt.Errorf("doing X: %w", err)`
 - Sentinel errors use `errors.New` and an `Err` prefix: `var ErrNotFound = errors.New("not found")`; check with `errors.Is` / `errors.As`, never string comparison
 - Implement backward-compatible changes: use functional-options or optional parameters instead of breaking existing call sites
