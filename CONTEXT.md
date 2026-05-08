@@ -44,6 +44,18 @@ _Avoid_: Connector, transport, integration
 A typed, callable capability registered with the agent (e.g. web search). Invoked by the LLM during the ReAct loop within a single turn.
 _Avoid_: Function, plugin, skill
 
+**Schedule**:
+A single scheduled job entry owned by a user. Contains a prompt to inject, a `next_fire_at` Unix timestamp, an optional `interval_seconds` for recurrence, a `channel_id` for delivery, and a unique ID. One-shot Schedules have no `interval_seconds`; recurring Schedules advance `next_fire_at` by `interval_seconds` after each firing.
+_Avoid_: Reminder (in code), cron job, timer
+
+**Scheduler**:
+The component that manages all Schedules across all users. Loaded from each user's Schedule File on startup; kept in memory as the source of truth at runtime. A background goroutine ticks every 60 seconds, finds due Schedules, injects their prompt into the AgentPool, delivers the response via the Platform Adapter, and advances or removes the Schedule.
+_Avoid_: Cron, job runner, task queue
+
+**Schedule File**:
+A per-user JSON file at `.storage/schedules/{user_id}/schedule.json` that durably stores all Schedules for that user. Written on every mutation (add or cancel). Read only on startup to hydrate the Scheduler's in-memory state. Nothing else writes to this file at runtime.
+_Avoid_: Schedule store, schedule log
+
 ## Relationships
 
 - A **Session** belongs to exactly one user; there is always exactly one active Session per user
