@@ -7,12 +7,14 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/rolfwessels/template-go-agent/internal/platform"
 )
 
 type Adapter struct {
 	in   io.Reader
 	out  io.Writer
-	msgs chan string
+	msgs chan platform.Message
 }
 
 func New() *Adapter {
@@ -24,7 +26,7 @@ func NewWithIO(in io.Reader, out io.Writer) *Adapter {
 }
 
 func (a *Adapter) Connect(ctx context.Context) error {
-	a.msgs = make(chan string)
+	a.msgs = make(chan platform.Message)
 	go a.scan(ctx)
 	return nil
 }
@@ -39,10 +41,11 @@ func (a *Adapter) scan(ctx context.Context) {
 	}()
 	scanner := bufio.NewScanner(a.in)
 	for scanner.Scan() {
-		msg := strings.TrimSpace(scanner.Text())
-		if msg == "" {
+		content := strings.TrimSpace(scanner.Text())
+		if content == "" {
 			continue
 		}
+		msg := platform.Message{UserID: "cli", ChannelID: "", Content: content}
 		select {
 		case a.msgs <- msg:
 		case <-ctx.Done():
@@ -51,12 +54,12 @@ func (a *Adapter) scan(ctx context.Context) {
 	}
 }
 
-func (a *Adapter) SendMessage(_ context.Context, msg string) error {
+func (a *Adapter) SendMessage(_ context.Context, _ string, msg string) error {
 	_, err := fmt.Fprintln(a.out, msg)
 	return err
 }
 
-func (a *Adapter) ReceiveMessages(_ context.Context) (<-chan string, error) {
+func (a *Adapter) ReceiveMessages(_ context.Context) (<-chan platform.Message, error) {
 	return a.msgs, nil
 }
 

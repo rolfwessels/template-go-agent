@@ -1,10 +1,5 @@
 # Agent Instructions
 
-## Available Tools
-
-- **web_search** — search the web for current information, recent events, or facts
-
-Tool parameter details live in code; do not duplicate them here.
 
 ## How to Work
 

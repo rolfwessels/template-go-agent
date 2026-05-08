@@ -44,10 +44,9 @@ func (s *Sweeper) OnDestroy(ctx context.Context, userID, sessionID string, _ []*
 	slog.Info("memory sweep complete", "userID", userID, "facts", len(facts))
 	for i, fact := range facts {
 		e := Entry{
-			ID:        fmt.Sprintf("%s-%d-%d", sessionID, cursor, i),
-			UserID:    userID,
-			SessionID: sessionID,
-			Content:   strings.TrimSpace(fact),
+			ID:      fmt.Sprintf("%s-%d-%d", userID, cursor, i),
+			UserID:  userID,
+			Content: strings.TrimSpace(fact),
 		}
 		if err := s.store.Save(ctx, e); err != nil {
 			continue

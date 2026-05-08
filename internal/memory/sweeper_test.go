@@ -53,7 +53,7 @@ func TestSweeper_WritesMarkdownFilesOnDestroy(t *testing.T) {
 	entries, err := os.ReadDir(filepath.Join(storeDir, "alice"))
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
-	assert.Equal(t, "sess-1-"+date+".md", entries[0].Name())
+	assert.Equal(t, date+".md", entries[0].Name())
 }
 
 func TestSweeper_CallsVectorStoreForEachFact(t *testing.T) {

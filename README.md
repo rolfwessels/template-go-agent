@@ -3,11 +3,13 @@
 [![GitHub release](https://img.shields.io/github/v/release/rolfwessels/template-go-agent)](https://github.com/rolfwessels/template-go-agent/releases)
 [![Go CI](https://github.com/rolfwessels/template-go-agent/actions/workflows/github-action.yml/badge.svg)](https://github.com/rolfwessels/template-go-agent/actions)
 
-A Go template for hybrid AI agents — conversational at the surface, with autonomous multi-step tool execution within a single user turn. Powered by [Eino](https://github.com/cloudwego/eino) (ReAct loop), OpenAI, and Tavily web search.
+A Go template for hybrid AI agents — conversational at the surface, with autonomous multi-step tool execution within a single user turn. Powered by [Eino](https://github.com/cloudwego/eino) (ReAct loop), OpenAI, and Tavily web search. Supports CLI and Discord out of the box.
 
 ## ✨ How it works
 
-The agent reads a question from stdin, runs a ReAct reasoning loop (calling web search via Tavily as needed), and prints a grounded answer. Its persona and instructions are loaded from `prompts/soul.md` and `prompts/instructions.md` at startup — edit those files to customise the agent's identity and behaviour.
+The agent receives a message from a platform adapter (CLI or Discord), runs a ReAct reasoning loop (calling tools as needed), and sends back a grounded answer. Its persona and instructions are loaded from `prompts/soul.md` and `prompts/instructions.md` at startup — edit those files to customise the agent's identity and behaviour.
+
+Built-in tools: `web_search`, `http_fetch`, `get_current_time`, `date_math`, `calculate`, `new_session`.
 
 ```bash
 # copy and populate env vars
@@ -41,6 +43,7 @@ Copy `.env.example` to `.env` and fill in:
 | `OLLAMA_BASE_URL` | | `http://localhost:11434/api` | Ollama API endpoint (set automatically in docker-compose) |
 | `SESSION_TIMEOUT_MINUTES` | | `30` | Inactivity timeout before agent eviction |
 | `CONVERSATION_HISTORY_WINDOW_SIZE` | | `20` | Messages reloaded from Session Log on agent recreation |
+| `DISCORD_TOKEN` | | — | Discord bot token. If set, Discord adapter is used instead of CLI |
 
 ## 🚀 Getting started with development
 

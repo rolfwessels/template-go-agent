@@ -47,7 +47,7 @@ func (s *ChromemStore) Add(ctx context.Context, e Entry) error {
 	return col.AddDocument(ctx, chromem.Document{
 		ID:       e.ID,
 		Content:  e.Content,
-		Metadata: map[string]string{"user_id": e.UserID, "session_id": e.SessionID},
+		Metadata: map[string]string{"user_id": e.UserID},
 	})
 }
 
@@ -66,10 +66,9 @@ func (s *ChromemStore) Search(ctx context.Context, userID, query string, k int) 
 	entries := make([]Entry, len(results))
 	for i, r := range results {
 		entries[i] = Entry{
-			ID:        r.ID,
-			UserID:    userID,
-			SessionID: r.Metadata["session_id"],
-			Content:   r.Content,
+			ID:      r.ID,
+			UserID:  userID,
+			Content: r.Content,
 		}
 	}
 	return entries, nil

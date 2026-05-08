@@ -23,7 +23,7 @@ func TestAdapter_ReceivesMessages(t *testing.T) {
 
 	var received []string
 	for msg := range msgs {
-		received = append(received, msg)
+		received = append(received, msg.Content)
 	}
 
 	// assert
@@ -42,11 +42,27 @@ func TestAdapter_SkipsEmptyLines(t *testing.T) {
 
 	var received []string
 	for msg := range msgs {
-		received = append(received, msg)
+		received = append(received, msg.Content)
 	}
 
 	// assert
 	assert.Equal(t, []string{"hello", "world"}, received)
+}
+
+func TestAdapter_MessageHasCliUserID(t *testing.T) {
+	// arrange
+	adapter := cli.NewWithIO(strings.NewReader("hello\n"), &bytes.Buffer{})
+	ctx := context.Background()
+
+	// act
+	require.NoError(t, adapter.Connect(ctx))
+	msgs, err := adapter.ReceiveMessages(ctx)
+	require.NoError(t, err)
+	msg := <-msgs
+
+	// assert
+	assert.Equal(t, "cli", msg.UserID)
+	assert.Equal(t, "", msg.ChannelID)
 }
 
 func TestAdapter_SendMessage(t *testing.T) {
@@ -57,7 +73,7 @@ func TestAdapter_SendMessage(t *testing.T) {
 
 	// act
 	require.NoError(t, adapter.Connect(ctx))
-	require.NoError(t, adapter.SendMessage(ctx, "hello"))
+	require.NoError(t, adapter.SendMessage(ctx, "", "hello"))
 
 	// assert
 	assert.Equal(t, "hello\n", out.String())

@@ -10,10 +10,9 @@ import (
 )
 
 type Entry struct {
-	ID        string
-	UserID    string
-	SessionID string
-	Content   string
+	ID      string
+	UserID  string
+	Content string
 }
 
 type FileStore struct {
@@ -30,7 +29,7 @@ func (s *FileStore) Save(_ context.Context, e Entry) error {
 		return fmt.Errorf("creating memory dir: %w", err)
 	}
 	date := time.Now().UTC().Format("2006-01-02")
-	path := filepath.Join(userDir, fmt.Sprintf("%s-%s.md", e.SessionID, date))
+	path := filepath.Join(userDir, fmt.Sprintf("%s.md", date))
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		header := fmt.Sprintf("# %s\n\n", date)

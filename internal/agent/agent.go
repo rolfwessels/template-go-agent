@@ -13,6 +13,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/rolfwessels/template-go-agent/internal/config"
+	"github.com/rolfwessels/template-go-agent/internal/memory"
 )
 
 type msgGenerator interface {
@@ -37,12 +38,17 @@ func WithResetCallback(cb func(ctx context.Context) error) Option {
 	return func(a *Agent) { a.resetCallback = cb }
 }
 
+func WithExtraInstructions(s string) Option {
+	return func(a *Agent) { a.extraInstructions = s }
+}
+
 type Agent struct {
-	react         msgGenerator
-	systemPrompt  string
-	memoryContext string
-	history       ConversationHistory
-	resetCallback func(ctx context.Context) error
+	react             msgGenerator
+	systemPrompt      string
+	memoryContext     string
+	extraInstructions string
+	history           ConversationHistory
+	resetCallback     func(ctx context.Context) error
 }
 
 func NewWithGenerator(gen Generator, systemPrompt string, opts ...Option) *Agent {
@@ -67,7 +73,7 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 		return nil, fmt.Errorf("creating chat model: %w", err)
 	}
 
-	tools := []tool.BaseTool{newTavilyTool(cfg.TavilyAPIKey)}
+	tools := []tool.BaseTool{newTavilyTool(cfg.TavilyAPIKey), newCurrentTimeTool(), newDateMathTool(), newHTTPFetchTool(), newCalculatorTool()}
 	if a.resetCallback != nil {
 		tools = append(tools, newNewSessionTool(a.resetCallback))
 	}
@@ -83,6 +89,10 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 	systemPrompt, err := loadPrompts("prompts/soul.md", "prompts/instructions.md")
 	if err != nil {
 		return nil, err
+	}
+	systemPrompt += "\n\n" + memory.Instructions()
+	if a.extraInstructions != "" {
+		systemPrompt += "\n\n" + a.extraInstructions
 	}
 
 	a.react = &reactMsgGenerator{agent: ra}

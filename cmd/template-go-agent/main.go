@@ -15,6 +15,7 @@ import (
 	"github.com/rolfwessels/template-go-agent/internal/memory"
 	"github.com/rolfwessels/template-go-agent/internal/platform"
 	"github.com/rolfwessels/template-go-agent/internal/platform/cli"
+	"github.com/rolfwessels/template-go-agent/internal/platform/discord"
 )
 
 var version = "dev"
@@ -55,17 +56,26 @@ func run() error {
 
 	sweeper := memory.NewSweeper(fileStore, vectorStore, distiller, sessions)
 
+	var platformInstructions string
+	if cfg.DiscordToken != "" {
+		platformInstructions = discord.Instructions()
+	}
+
 	var pool *agent.AgentPool
 	pool = agent.NewPool(
 		func(ctx context.Context, userID string, history []*schema.Message) (*agent.Agent, error) {
 			memCtx, _ := fileStore.AllAsContext(ctx, userID)
-			return agent.New(ctx, cfg,
+			opts := []agent.Option{
 				agent.WithMemoryContext(memCtx),
 				agent.WithInitialHistory(history),
 				agent.WithResetCallback(func(ctx context.Context) error {
 					return pool.Reset(ctx, userID)
 				}),
-			)
+			}
+			if platformInstructions != "" {
+				opts = append(opts, agent.WithExtraInstructions(platformInstructions))
+			}
+			return agent.New(ctx, cfg, opts...)
 		},
 		time.Duration(cfg.SessionTimeoutMinutes)*time.Minute,
 		sweeper.OnDestroy,
@@ -78,7 +88,15 @@ func run() error {
 		}),
 	)
 
-	result := runPlatform(ctx, pool, cli.New())
+	var adapter platform.MessagePlatform
+	if cfg.DiscordToken != "" {
+		slog.Info("discord token set — using Discord adapter")
+		adapter = discord.New(cfg.DiscordToken)
+	} else {
+		fmt.Printf("template-go-agent v%s — type your question and press Enter (Ctrl+C to quit)\n", version)
+		adapter = cli.New()
+	}
+	result := runPlatform(ctx, pool, adapter)
 	slog.Info("shutting down")
 	if err := pool.Shutdown(context.Background()); err != nil {
 		slog.Error("shutdown completed with errors", "err", err)
@@ -97,15 +115,13 @@ func runPlatform(ctx context.Context, pool *agent.AgentPool, p platform.MessageP
 		return fmt.Errorf("receiving messages: %w", err)
 	}
 
-	fmt.Printf("template-go-agent v%s — type your question and press Enter (Ctrl+C to quit)\n", version)
-
 	for msg := range msgs {
-		answer, err := pool.Send(ctx, "cli-user", msg)
+		answer, err := pool.Send(ctx, msg.UserID, msg.Content)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			continue
 		}
-		if err := p.SendMessage(ctx, answer); err != nil {
+		if err := p.SendMessage(ctx, msg.ChannelID, answer); err != nil {
 			fmt.Fprintf(os.Stderr, "error sending message: %v\n", err)
 		}
 	}

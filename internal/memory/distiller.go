@@ -9,7 +9,8 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-const distillPrompt = `Extract key facts, preferences, or outcomes from this conversation worth remembering long-term.
+const distillPrompt = `Extract key facts, preferences, or outcomes worth remembering long-term.
+Sources: what the user said, and any lines starting with "Note:".
 Return one fact per line. If nothing is worth remembering, return nothing.`
 
 type llmDistiller struct {
@@ -30,10 +31,14 @@ func NewLLMDistiller(ctx context.Context, apiKey, model string) (Distiller, erro
 func (d *llmDistiller) Distill(ctx context.Context, messages []*schema.Message) ([]string, error) {
 	var history strings.Builder
 	for _, m := range messages {
-		if m.Role != schema.User {
-			continue
+		switch m.Role {
+		case schema.User:
+			history.WriteString(m.Content + "\n")
+		case schema.Assistant:
+			if isMemoryMarker(m.Content) {
+				history.WriteString("Note: " + m.Content + "\n")
+			}
 		}
-		history.WriteString(m.Content + "\n")
 	}
 	resp, err := d.model.Generate(ctx, []*schema.Message{
 		schema.SystemMessage(distillPrompt),
@@ -49,4 +54,9 @@ func (d *llmDistiller) Distill(ctx context.Context, messages []*schema.Message) 
 		}
 	}
 	return facts, nil
+}
+
+func isMemoryMarker(content string) bool {
+	lower := strings.ToLower(content)
+	return strings.Contains(lower, "i'll remember") || strings.Contains(lower, "i will remember")
 }
