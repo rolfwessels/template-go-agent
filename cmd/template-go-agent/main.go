@@ -70,6 +70,7 @@ func run() error {
 			opts := []agent.Option{
 				agent.WithMemoryContext(memCtx),
 				agent.WithInitialHistory(history),
+				agent.WithMemoryDir(fileStore.MemoryDir(userID)),
 				agent.WithResetCallback(func(ctx context.Context) error {
 					return pool.Reset(ctx, userID)
 				}),

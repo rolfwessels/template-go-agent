@@ -29,7 +29,7 @@ All per-user assets live under `.storage/user/{user_id}/`: `memory/` for Long-te
 _Avoid_: Flat per-asset directories at the storage root
 
 **Long-term Memory**:
-Distilled facts, preferences, or outcomes extracted from the Session Log by the Memory Sweep. Survives across Sessions. Stored as Markdown files named `{sessionID}-{yyyy-mm-dd}.md` with a date header and bullet-point facts; multiple sweeps on the same day append to the same file.
+Distilled facts, preferences, or outcomes extracted from the Session Log by the Memory Sweep. Survives across Sessions. Stored under `memory/` as three file types: `MEMORY.md` (index, always loaded into the system prompt), `general.md` (stable facts, always loaded), and `daily/{date}.md` (time-sensitive facts for a specific date, browsed on demand via `read_memory_file`). The Distiller classifies each fact as `general` or `daily`; the Sweeper writes to the appropriate file and rebuilds `MEMORY.md` after each run.
 _Avoid_: Memory (unqualified), knowledge base
 
 **Memory Sweep**:

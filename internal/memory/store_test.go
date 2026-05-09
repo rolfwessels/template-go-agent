@@ -2,7 +2,6 @@ package memory
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,104 +12,170 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFileStore_SaveCreatesDateFile(t *testing.T) {
+func TestFileStore_SaveGeneral_CreatesGeneralFile(t *testing.T) {
 	// arrange
 	dir := t.TempDir()
 	store := NewFileStore(dir)
-	e := Entry{UserID: "alice", Content: "Alice likes Go"}
-	date := time.Now().UTC().Format("2006-01-02")
 
 	// act
-	err := store.Save(context.Background(), e)
+	err := store.Save(context.Background(), "alice", Fact{Content: "Alice likes Go", Kind: KindGeneral})
 
 	// assert
 	require.NoError(t, err)
-	path := filepath.Join(dir, "user", "alice", "memory", fmt.Sprintf("%s.md", date))
+	path := filepath.Join(dir, "user", "alice", "memory", "general.md")
 	_, statErr := os.Stat(path)
 	assert.NoError(t, statErr)
 }
 
-func TestFileStore_SaveAppendsFacts(t *testing.T) {
+func TestFileStore_SaveDaily_CreatesDailyFile(t *testing.T) {
+	// arrange
+	dir := t.TempDir()
+	store := NewFileStore(dir)
+	date := time.Now().UTC().Format("2006-01-02")
+
+	// act
+	err := store.Save(context.Background(), "alice", Fact{Content: "meeting today", Kind: KindDaily})
+
+	// assert
+	require.NoError(t, err)
+	path := filepath.Join(dir, "user", "alice", "memory", "daily", date+".md")
+	_, statErr := os.Stat(path)
+	assert.NoError(t, statErr)
+}
+
+func TestFileStore_SaveGeneral_AppendsFacts(t *testing.T) {
 	// arrange
 	dir := t.TempDir()
 	store := NewFileStore(dir)
 	ctx := context.Background()
-	date := time.Now().UTC().Format("2006-01-02")
 
 	// act
-	require.NoError(t, store.Save(ctx, Entry{UserID: "alice", Content: "fact one"}))
-	require.NoError(t, store.Save(ctx, Entry{UserID: "alice", Content: "fact two"}))
+	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "fact one", Kind: KindGeneral}))
+	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "fact two", Kind: KindGeneral}))
 
 	// assert
-	data, err := os.ReadFile(filepath.Join(dir, "user", "alice", "memory", fmt.Sprintf("%s.md", date)))
+	data, err := os.ReadFile(filepath.Join(dir, "user", "alice", "memory", "general.md"))
 	require.NoError(t, err)
 	body := string(data)
 	assert.Contains(t, body, "- fact one")
 	assert.Contains(t, body, "- fact two")
 }
 
-func TestFileStore_DifferentSessionsSameDay_SingleFile(t *testing.T) {
+func TestFileStore_UpdateIndex_UsesMarkdownLinks(t *testing.T) {
 	// arrange
 	dir := t.TempDir()
 	store := NewFileStore(dir)
 	ctx := context.Background()
+	date := time.Now().UTC().Format("2006-01-02")
+	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "pref", Kind: KindGeneral}))
+	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "event", Kind: KindDaily}))
 
-	// act — two saves representing facts from different sessions
-	require.NoError(t, store.Save(ctx, Entry{UserID: "alice", Content: "fact from session one"}))
-	require.NoError(t, store.Save(ctx, Entry{UserID: "alice", Content: "fact from session two"}))
+	// act
+	err := store.UpdateIndex("alice", map[string]string{
+		"daily/" + date + ".md": "Some event happened today.",
+	})
 
-	// assert — only one file exists (not one per session)
-	entries, err := os.ReadDir(filepath.Join(dir, "user", "alice", "memory"))
+	// assert — Markdown link syntax with provided summary
 	require.NoError(t, err)
-	assert.Len(t, entries, 1)
+	data, err := os.ReadFile(filepath.Join(dir, "user", "alice", "memory", "MEMORY.md"))
+	require.NoError(t, err)
+	body := string(data)
+	assert.Contains(t, body, "[general.md](general.md)")
+	assert.Contains(t, body, "[daily/"+date+".md](daily/"+date+".md)")
+	assert.Contains(t, body, "Some event happened today.")
 }
 
-func TestFileStore_AllReturnsStoredFacts(t *testing.T) {
+func TestFileStore_UpdateIndex_DefaultDescriptionWhenNoSummary(t *testing.T) {
 	// arrange
 	dir := t.TempDir()
 	store := NewFileStore(dir)
 	ctx := context.Background()
-	_ = store.Save(ctx, Entry{UserID: "alice", Content: "fact one"})
-	_ = store.Save(ctx, Entry{UserID: "alice", Content: "fact two"})
+	date := time.Now().UTC().Format("2006-01-02")
+	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "event", Kind: KindDaily}))
 
-	// act
-	entries, err := store.All(ctx, "alice")
+	// act — pass empty summaries map
+	require.NoError(t, store.UpdateIndex("alice", map[string]string{}))
 
-	// assert
-	require.NoError(t, err)
-	require.Len(t, entries, 1)
-	assert.Contains(t, entries[0].Content, "fact one")
-	assert.Contains(t, entries[0].Content, "fact two")
+	// assert — falls back to "facts from {date}"
+	data, _ := os.ReadFile(filepath.Join(dir, "user", "alice", "memory", "MEMORY.md"))
+	assert.Contains(t, string(data), "facts from "+date)
 }
 
-func TestFileStore_AllReturnsEmptyForUnknownUser(t *testing.T) {
-	// arrange
-	store := NewFileStore(t.TempDir())
-
-	// act
-	entries, err := store.All(context.Background(), "unknown")
-
-	// assert
-	require.NoError(t, err)
-	assert.Empty(t, entries)
-}
-
-func TestFileStore_AllAsContextFormatsEntries(t *testing.T) {
+func TestFileStore_UpdateIndex_OmitsGeneralWhenAbsent(t *testing.T) {
 	// arrange
 	dir := t.TempDir()
 	store := NewFileStore(dir)
 	ctx := context.Background()
-	_ = store.Save(ctx, Entry{UserID: "bob", Content: "Bob prefers dark mode"})
+	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "event", Kind: KindDaily}))
 
 	// act
-	got, err := store.AllAsContext(ctx, "bob")
+	require.NoError(t, store.UpdateIndex("alice", nil))
+
+	// assert
+	data, _ := os.ReadFile(filepath.Join(dir, "user", "alice", "memory", "MEMORY.md"))
+	assert.NotContains(t, string(data), "general.md")
+}
+
+func TestFileStore_UpdateIndex_PreservesExistingSummaries(t *testing.T) {
+	// arrange
+	dir := t.TempDir()
+	store := NewFileStore(dir)
+	ctx := context.Background()
+	date := time.Now().UTC().Format("2006-01-02")
+	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "event", Kind: KindDaily}))
+	// First sweep writes a good summary
+	require.NoError(t, store.UpdateIndex("alice", map[string]string{
+		"daily/" + date + ".md": "Original great summary.",
+	}))
+
+	// act — second sweep has no new summaries for the existing file
+	require.NoError(t, store.UpdateIndex("alice", map[string]string{}))
+
+	// assert — original summary preserved
+	data, _ := os.ReadFile(filepath.Join(dir, "user", "alice", "memory", "MEMORY.md"))
+	assert.Contains(t, string(data), "Original great summary.")
+}
+
+func TestFileStore_UpdateIndex_NewSummaryOverridesOld(t *testing.T) {
+	// arrange
+	dir := t.TempDir()
+	store := NewFileStore(dir)
+	ctx := context.Background()
+	date := time.Now().UTC().Format("2006-01-02")
+	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "event", Kind: KindDaily}))
+	require.NoError(t, store.UpdateIndex("alice", map[string]string{
+		"daily/" + date + ".md": "Old summary.",
+	}))
+
+	// act — new sweep provides an updated summary
+	require.NoError(t, store.UpdateIndex("alice", map[string]string{
+		"daily/" + date + ".md": "New updated summary.",
+	}))
+
+	// assert — new summary replaces old
+	data, _ := os.ReadFile(filepath.Join(dir, "user", "alice", "memory", "MEMORY.md"))
+	assert.Contains(t, string(data), "New updated summary.")
+	assert.NotContains(t, string(data), "Old summary.")
+}
+
+func TestFileStore_AllAsContext_IncludesMemoryIndexAndGeneral(t *testing.T) {
+	// arrange
+	dir := t.TempDir()
+	store := NewFileStore(dir)
+	ctx := context.Background()
+	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "Alice likes Go", Kind: KindGeneral}))
+	require.NoError(t, store.UpdateIndex("alice", nil))
+
+	// act
+	got, err := store.AllAsContext(ctx, "alice")
 
 	// assert
 	require.NoError(t, err)
-	assert.Contains(t, got, "Bob prefers dark mode")
+	assert.Contains(t, got, "Alice likes Go")
+	assert.Contains(t, got, "general.md")
 }
 
-func TestFileStore_AllAsContextEmptyForNoEntries(t *testing.T) {
+func TestFileStore_AllAsContext_EmptyForNewUser(t *testing.T) {
 	// arrange
 	store := NewFileStore(t.TempDir())
 
@@ -122,18 +187,15 @@ func TestFileStore_AllAsContextEmptyForNoEntries(t *testing.T) {
 	assert.Empty(t, got)
 }
 
-func TestFileStore_SaveDateHeaderInFile(t *testing.T) {
+func TestFileStore_GeneralFileHasHeader(t *testing.T) {
 	// arrange
 	dir := t.TempDir()
 	store := NewFileStore(dir)
-	date := time.Now().UTC().Format("2006-01-02")
 
 	// act
-	require.NoError(t, store.Save(context.Background(), Entry{UserID: "carol", Content: "a fact"}))
+	require.NoError(t, store.Save(context.Background(), "carol", Fact{Content: "a fact", Kind: KindGeneral}))
 
-	// assert — file starts with date header
-	entries, _ := os.ReadDir(filepath.Join(dir, "user", "carol", "memory"))
-	require.Len(t, entries, 1)
-	data, _ := os.ReadFile(filepath.Join(dir, "user", "carol", "memory", entries[0].Name()))
-	assert.True(t, strings.HasPrefix(string(data), fmt.Sprintf("# %s", date)))
+	// assert
+	data, _ := os.ReadFile(filepath.Join(dir, "user", "carol", "memory", "general.md"))
+	assert.True(t, strings.HasPrefix(string(data), "# general\n"))
 }

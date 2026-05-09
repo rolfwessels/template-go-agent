@@ -51,16 +51,20 @@ func (g *spyGenerator) callCount() int {
 
 // stubDistiller returns a fixed list of facts regardless of input.
 type stubDistiller struct {
-	facts []string
+	facts []memory.Fact
 }
 
-func (d *stubDistiller) Distill(_ context.Context, _ []*schema.Message) ([]string, error) {
+func (d *stubDistiller) Distill(_ context.Context, _ []*schema.Message) ([]memory.Fact, error) {
 	return d.facts, nil
+}
+
+func (d *stubDistiller) Summarize(_ context.Context, _ []memory.Fact) (string, error) {
+	return "", nil
 }
 
 // newTestPool creates an AgentPool wired to a temp FileStore, SessionStore, and stub distiller.
 // The factory fn is called for each new user session and receives the loaded memory context.
-func newTestPool(t *testing.T, dir string, distillerFacts []string, timeout time.Duration, makeGen func() *spyGenerator) (*agent.AgentPool, *memory.FileStore) {
+func newTestPool(t *testing.T, dir string, distillerFacts []memory.Fact, timeout time.Duration, makeGen func() *spyGenerator) (*agent.AgentPool, *memory.FileStore) {
 	t.Helper()
 	fileStore := memory.NewFileStore(dir)
 	sessions := memory.NewSessionStore(dir)
@@ -111,7 +115,7 @@ func TestIntegration_TimeoutTriggersMemorySweep(t *testing.T) {
 	// arrange
 	dir := t.TempDir()
 	ctx := context.Background()
-	pool, fileStore := newTestPool(t, dir, []string{"remembered fact"}, 20*time.Millisecond, func() *spyGenerator {
+	pool, fileStore := newTestPool(t, dir, []memory.Fact{{Content: "remembered fact", Kind: memory.KindGeneral}}, 20*time.Millisecond, func() *spyGenerator {
 		return &spyGenerator{response: "ok"}
 	})
 
@@ -122,16 +126,16 @@ func TestIntegration_TimeoutTriggersMemorySweep(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// assert — at least one file written for alice
-	entries, err := fileStore.All(ctx, "alice")
+	memCtx, err := fileStore.AllAsContext(ctx, "alice")
 	require.NoError(t, err)
-	assert.NotEmpty(t, entries, "memory sweep should have written at least one entry")
+	assert.NotEmpty(t, memCtx, "memory sweep should have written at least one entry")
 }
 
 func TestIntegration_ShutdownTriggersSweepForAllAgents(t *testing.T) {
 	// arrange
 	dir := t.TempDir()
 	ctx := context.Background()
-	pool, fileStore := newTestPool(t, dir, []string{"a fact"}, time.Minute, func() *spyGenerator {
+	pool, fileStore := newTestPool(t, dir, []memory.Fact{{Content: "a fact", Kind: memory.KindGeneral}}, time.Minute, func() *spyGenerator {
 		return &spyGenerator{response: "ok"}
 	})
 
@@ -141,10 +145,10 @@ func TestIntegration_ShutdownTriggersSweepForAllAgents(t *testing.T) {
 	require.NoError(t, pool.Shutdown(ctx))
 
 	// assert — both users have memory files
-	e1, _ := fileStore.All(ctx, "user1")
-	e2, _ := fileStore.All(ctx, "user2")
-	assert.NotEmpty(t, e1, "user1 should have memory entries after shutdown")
-	assert.NotEmpty(t, e2, "user2 should have memory entries after shutdown")
+	m1, _ := fileStore.AllAsContext(ctx, "user1")
+	m2, _ := fileStore.AllAsContext(ctx, "user2")
+	assert.NotEmpty(t, m1, "user1 should have memory entries after shutdown")
+	assert.NotEmpty(t, m2, "user2 should have memory entries after shutdown")
 }
 
 func TestIntegration_MemoryFromPreviousSessionInjectedInNext(t *testing.T) {
@@ -163,7 +167,7 @@ func TestIntegration_MemoryFromPreviousSessionInjectedInNext(t *testing.T) {
 	}
 
 	// session 1 — facts are distilled on shutdown
-	pool1, _ := newTestPool(t, dir, []string{"user's favourite language is Go"}, time.Minute, makeGen)
+	pool1, _ := newTestPool(t, dir, []memory.Fact{{Content: "user's favourite language is Go", Kind: memory.KindGeneral}}, time.Minute, makeGen)
 	_, err := pool1.Send(ctx, "bob", "", "I love Go")
 	require.NoError(t, err)
 	pool1.Shutdown(ctx)
@@ -200,7 +204,7 @@ func TestIntegration_SessionResetClearsHistoryAndPreservesLongTermMemory(t *test
 		return g
 	}
 
-	pool, _ := newTestPool(t, dir, []string{"user likes cats"}, time.Minute, makeGen)
+	pool, _ := newTestPool(t, dir, []memory.Fact{{Content: "user likes cats", Kind: memory.KindGeneral}}, time.Minute, makeGen)
 
 	// act — build up some conversation history
 	_, err := pool.Send(ctx, "carol", "", "I love cats")

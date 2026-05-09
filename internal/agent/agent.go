@@ -55,11 +55,16 @@ func WithScheduler(manager ScheduleManager, userID, channelID string) Option {
 	}
 }
 
+func WithMemoryDir(dir string) Option {
+	return func(a *Agent) { a.memoryDir = dir }
+}
+
 type Agent struct {
 	react             msgGenerator
 	systemPrompt      string
 	memoryContext     string
 	extraInstructions string
+	memoryDir         string
 	history           ConversationHistory
 	resetCallback     func(ctx context.Context) error
 	schedulerBinding  *schedulerBinding
@@ -97,6 +102,9 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 			newListRemindersTool(sb.manager, sb.userID),
 			newCancelReminderTool(sb.manager, sb.userID),
 		)
+	}
+	if a.memoryDir != "" {
+		tools = append(tools, newReadMemoryFileTool(a.memoryDir), newSearchMemoryTool(a.memoryDir))
 	}
 
 	ra, err := react.NewAgent(ctx, &react.AgentConfig{

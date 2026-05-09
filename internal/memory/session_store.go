@@ -172,6 +172,37 @@ func (s *SessionStore) ReadFrom(userID, sessionID string, fromLine int) ([]*sche
 	return msgs, total, nil
 }
 
+func (s *SessionStore) ReadFromByDate(userID, sessionID string, fromLine int) (map[string][]*schema.Message, int, error) {
+	f, err := os.Open(s.sessionPath(userID, sessionID))
+	if os.IsNotExist(err) {
+		return nil, 0, nil
+	}
+	if err != nil {
+		return nil, 0, fmt.Errorf("opening session file: %w", err)
+	}
+	defer f.Close()
+
+	byDate := make(map[string][]*schema.Message)
+	total := 0
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		total++
+		if total <= fromLine {
+			continue
+		}
+		var line sessionLine
+		if err := json.Unmarshal(scanner.Bytes(), &line); err != nil {
+			continue
+		}
+		date := line.Timestamp.UTC().Format("2006-01-02")
+		byDate[date] = append(byDate[date], toSchemaMessage(line))
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, total, fmt.Errorf("scanning session file: %w", err)
+	}
+	return byDate, total, nil
+}
+
 func (s *SessionStore) NewSession(userID string) (string, error) {
 	sessDir := s.sessDir(userID)
 	if err := os.MkdirAll(sessDir, 0750); err != nil {

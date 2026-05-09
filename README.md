@@ -9,7 +9,7 @@ A Go template for hybrid AI agents — conversational at the surface, with auton
 
 The agent receives a message from a platform adapter (CLI or Discord), runs a ReAct reasoning loop (calling tools as needed), and sends back a grounded answer. Its persona and instructions are loaded from `prompts/soul.md` and `prompts/instructions.md` at startup — edit those files to customise the agent's identity and behaviour.
 
-Built-in tools: `web_search`, `http_fetch`, `get_current_time`, `date_math`, `calculate`, `new_session`, `schedule_reminder`, `list_reminders`, `cancel_reminder`.
+Built-in tools: `web_search`, `http_fetch`, `get_current_time`, `date_math`, `calculate`, `new_session`, `schedule_reminder`, `list_reminders`, `cancel_reminder`, `read_memory_file`, `search_memory`.
 
 ```bash
 # copy and populate env vars
@@ -26,8 +26,6 @@ Type a question and press Enter. `Ctrl+C` to quit.
 
 - [Eino](https://github.com/cloudwego/eino) — ReAct agent loop and OpenAI provider
 - [Tavily](https://tavily.com) — web search tool
-- [chromem-go](https://github.com/philippgille/chromem-go) — embedded vector store for long-term memory
-- [Ollama](https://ollama.com) — local embeddings via docker-compose
 - Docker for the dev environment
 - MakeFile because it just works!
 
@@ -40,7 +38,6 @@ Copy `.env.example` to `.env` and fill in:
 | `OPENAI_API_KEY` | ✅ | — | OpenAI API key |
 | `OPENAI_MODEL` | | `gpt-5.5` | Model to use |
 | `TAVILY_API_KEY` | ✅ | — | Tavily search API key |
-| `OLLAMA_BASE_URL` | | `http://localhost:11434/api` | Ollama API endpoint (set automatically in docker-compose) |
 | `SESSION_TIMEOUT_MINUTES` | | `30` | Inactivity timeout before agent eviction |
 | `CONVERSATION_HISTORY_WINDOW_SIZE` | | `20` | Messages reloaded from Session Log on agent recreation |
 | `DISCORD_TOKEN` | | — | Discord bot token. If set, Discord adapter is used instead of CLI |

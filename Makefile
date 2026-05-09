@@ -58,6 +58,7 @@ help:
 	@echo " Service Targets (should only be run inside the docker container)"
 	@echo " - version       : Show current version number"
 	@echo " - start         : Run the $(project)"
+	@echo " - chat          : Interactive CLI chat (local test harness, always CLI mode)"
 	@echo " - vet           : Vet the $(project)"
 	@echo " - test          : Vet and test the $(project)"
 	@echo " - publish       : Publish the $(project)"
@@ -104,6 +105,10 @@ print-version:
 start:
 	@echo -e "Starting $(project)"
 	@go run ./cmd/$(binary)
+
+chat:
+	@echo -e "Starting chat (CLI mode, user=local)"
+	@go run ./cmd/chat
 
 vet:
 	@echo -e "Vetting ${GREEN}v$(version)${NC}"

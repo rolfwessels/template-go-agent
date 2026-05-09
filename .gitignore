@@ -23,3 +23,5 @@ Thumbs.db
 !.env.example
 .scratch/
 /.storage/
+sweep-session
+chat

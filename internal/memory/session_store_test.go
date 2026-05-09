@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cloudwego/eino/schema"
@@ -167,4 +168,73 @@ func TestSessionStore_ReadFrom_NoFileReturnsEmpty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, total)
 	assert.Empty(t, msgs)
+}
+
+func TestSessionStore_ReadFromByDate_GroupsByTimestampDate(t *testing.T) {
+	// arrange
+	dir := t.TempDir()
+	sessDir := filepath.Join(dir, "user", "user1", "sessions")
+	require.NoError(t, os.MkdirAll(sessDir, 0750))
+	lines := []string{
+		`{"timestamp":"2026-04-18T08:00:00Z","role":"user","content":"day one msg1"}`,
+		`{"timestamp":"2026-04-18T09:00:00Z","role":"assistant","content":"day one reply"}`,
+		`{"timestamp":"2026-04-19T10:00:00Z","role":"user","content":"day two msg1"}`,
+	}
+	require.NoError(t, os.WriteFile(
+		filepath.Join(sessDir, "sess-1.jsonl"),
+		[]byte(strings.Join(lines, "\n")+"\n"),
+		0600,
+	))
+	store := NewSessionStore(dir)
+
+	// act
+	byDate, total, err := store.ReadFromByDate("user1", "sess-1", 0)
+
+	// assert
+	require.NoError(t, err)
+	assert.Equal(t, 3, total)
+	require.Len(t, byDate, 2)
+	assert.Len(t, byDate["2026-04-18"], 2)
+	assert.Len(t, byDate["2026-04-19"], 1)
+	assert.Equal(t, "day one msg1", byDate["2026-04-18"][0].Content)
+	assert.Equal(t, "day two msg1", byDate["2026-04-19"][0].Content)
+}
+
+func TestSessionStore_ReadFromByDate_Respectscursor(t *testing.T) {
+	// arrange
+	dir := t.TempDir()
+	sessDir := filepath.Join(dir, "user", "user1", "sessions")
+	require.NoError(t, os.MkdirAll(sessDir, 0750))
+	lines := []string{
+		`{"timestamp":"2026-04-18T08:00:00Z","role":"user","content":"old"}`,
+		`{"timestamp":"2026-04-19T08:00:00Z","role":"user","content":"new"}`,
+	}
+	require.NoError(t, os.WriteFile(
+		filepath.Join(sessDir, "sess-1.jsonl"),
+		[]byte(strings.Join(lines, "\n")+"\n"),
+		0600,
+	))
+	store := NewSessionStore(dir)
+
+	// act — cursor=1 skips the first line
+	byDate, total, err := store.ReadFromByDate("user1", "sess-1", 1)
+
+	// assert
+	require.NoError(t, err)
+	assert.Equal(t, 2, total)
+	assert.NotContains(t, byDate, "2026-04-18")
+	assert.Contains(t, byDate, "2026-04-19")
+}
+
+func TestSessionStore_ReadFromByDate_NoFileReturnsEmpty(t *testing.T) {
+	// arrange
+	store := NewSessionStore(t.TempDir())
+
+	// act
+	byDate, total, err := store.ReadFromByDate("user1", "no-such-session", 0)
+
+	// assert
+	require.NoError(t, err)
+	assert.Equal(t, 0, total)
+	assert.Empty(t, byDate)
 }
