@@ -25,7 +25,7 @@ func TestFileStore_SaveCreatesDateFile(t *testing.T) {
 
 	// assert
 	require.NoError(t, err)
-	path := filepath.Join(dir, "alice", fmt.Sprintf("%s.md", date))
+	path := filepath.Join(dir, "user", "alice", "memory", fmt.Sprintf("%s.md", date))
 	_, statErr := os.Stat(path)
 	assert.NoError(t, statErr)
 }
@@ -42,7 +42,7 @@ func TestFileStore_SaveAppendsFacts(t *testing.T) {
 	require.NoError(t, store.Save(ctx, Entry{UserID: "alice", Content: "fact two"}))
 
 	// assert
-	data, err := os.ReadFile(filepath.Join(dir, "alice", fmt.Sprintf("%s.md", date)))
+	data, err := os.ReadFile(filepath.Join(dir, "user", "alice", "memory", fmt.Sprintf("%s.md", date)))
 	require.NoError(t, err)
 	body := string(data)
 	assert.Contains(t, body, "- fact one")
@@ -60,7 +60,7 @@ func TestFileStore_DifferentSessionsSameDay_SingleFile(t *testing.T) {
 	require.NoError(t, store.Save(ctx, Entry{UserID: "alice", Content: "fact from session two"}))
 
 	// assert — only one file exists (not one per session)
-	entries, err := os.ReadDir(filepath.Join(dir, "alice"))
+	entries, err := os.ReadDir(filepath.Join(dir, "user", "alice", "memory"))
 	require.NoError(t, err)
 	assert.Len(t, entries, 1)
 }
@@ -132,8 +132,8 @@ func TestFileStore_SaveDateHeaderInFile(t *testing.T) {
 	require.NoError(t, store.Save(context.Background(), Entry{UserID: "carol", Content: "a fact"}))
 
 	// assert — file starts with date header
-	entries, _ := os.ReadDir(filepath.Join(dir, "carol"))
+	entries, _ := os.ReadDir(filepath.Join(dir, "user", "carol", "memory"))
 	require.Len(t, entries, 1)
-	data, _ := os.ReadFile(filepath.Join(dir, "carol", entries[0].Name()))
+	data, _ := os.ReadFile(filepath.Join(dir, "user", "carol", "memory", entries[0].Name()))
 	assert.True(t, strings.HasPrefix(string(data), fmt.Sprintf("# %s", date)))
 }

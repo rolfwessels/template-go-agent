@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 
 	einoopenai "github.com/cloudwego/eino-ext/components/model/openai"
@@ -151,6 +152,9 @@ func (r *reactMsgGenerator) generate(ctx context.Context, input []*schema.Messag
 	for msg, ok, iterErr := iter.Next(); ok; msg, ok, iterErr = iter.Next() {
 		if iterErr != nil {
 			return nil, iterErr
+		}
+		for _, tc := range msg.ToolCalls {
+			slog.Info("tool call", "tool", tc.Function.Name, "args", tc.Function.Arguments)
 		}
 		msgs = append(msgs, msg)
 	}

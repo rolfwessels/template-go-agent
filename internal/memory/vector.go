@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"path/filepath"
+	"sync"
 
 	chromem "github.com/philippgille/chromem-go"
 )
@@ -14,24 +16,22 @@ type VectorStore interface {
 }
 
 type ChromemStore struct {
-	db    *chromem.DB
-	embFn chromem.EmbeddingFunc
+	baseDir string
+	embFn   chromem.EmbeddingFunc
+	mu      sync.Mutex
+	dbs     map[string]*chromem.DB
 }
 
-func NewChromemStore(ctx context.Context, ollamaBaseURL, dataDir string) (*ChromemStore, error) {
+func NewChromemStore(ctx context.Context, ollamaBaseURL, baseDir string) (*ChromemStore, error) {
 	embFn := chromem.NewEmbeddingFuncOllama("nomic-embed-text", ollamaBaseURL)
 	if _, err := embFn(ctx, "test"); err != nil {
 		return nil, fmt.Errorf("ollama not reachable at %s: %w", ollamaBaseURL, err)
 	}
-	db, err := chromem.NewPersistentDB(dataDir, false)
-	if err != nil {
-		return nil, fmt.Errorf("creating vector db: %w", err)
-	}
-	return &ChromemStore{db: db, embFn: embFn}, nil
+	return &ChromemStore{baseDir: baseDir, embFn: embFn, dbs: make(map[string]*chromem.DB)}, nil
 }
 
-func NewChromemStoreOrWarn(ctx context.Context, ollamaBaseURL, dataDir string) *ChromemStore {
-	cs, err := NewChromemStore(ctx, ollamaBaseURL, dataDir)
+func NewChromemStoreOrWarn(ctx context.Context, ollamaBaseURL, baseDir string) *ChromemStore {
+	cs, err := NewChromemStore(ctx, ollamaBaseURL, baseDir)
 	if err != nil {
 		log.Printf("warning: vector index unavailable, memory sweep will use Markdown-only: %v", err)
 		return nil
@@ -39,8 +39,27 @@ func NewChromemStoreOrWarn(ctx context.Context, ollamaBaseURL, dataDir string) *
 	return cs
 }
 
+func (s *ChromemStore) dbFor(userID string) (*chromem.DB, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if db, ok := s.dbs[userID]; ok {
+		return db, nil
+	}
+	dir := filepath.Join(s.baseDir, "user", userID, "memory")
+	db, err := chromem.NewPersistentDB(dir, false)
+	if err != nil {
+		return nil, fmt.Errorf("creating vector db for %s: %w", userID, err)
+	}
+	s.dbs[userID] = db
+	return db, nil
+}
+
 func (s *ChromemStore) Add(ctx context.Context, e Entry) error {
-	col, err := s.db.GetOrCreateCollection(e.UserID, nil, s.embFn)
+	db, err := s.dbFor(e.UserID)
+	if err != nil {
+		return err
+	}
+	col, err := db.GetOrCreateCollection(e.UserID, nil, s.embFn)
 	if err != nil {
 		return fmt.Errorf("getting collection: %w", err)
 	}
@@ -52,7 +71,11 @@ func (s *ChromemStore) Add(ctx context.Context, e Entry) error {
 }
 
 func (s *ChromemStore) Search(ctx context.Context, userID, query string, k int) ([]Entry, error) {
-	col, err := s.db.GetOrCreateCollection(userID, nil, s.embFn)
+	db, err := s.dbFor(userID)
+	if err != nil {
+		return nil, err
+	}
+	col, err := db.GetOrCreateCollection(userID, nil, s.embFn)
 	if err != nil {
 		return nil, fmt.Errorf("getting collection: %w", err)
 	}

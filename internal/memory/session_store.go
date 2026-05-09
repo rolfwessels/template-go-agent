@@ -28,8 +28,12 @@ func NewSessionStore(dir string) *SessionStore {
 	return &SessionStore{dir: dir}
 }
 
+func (s *SessionStore) sessDir(userID string) string {
+	return filepath.Join(s.dir, "user", userID, "sessions")
+}
+
 func (s *SessionStore) CurrentSession(userID string) (string, error) {
-	sessDir := filepath.Join(s.dir, userID, "sessions")
+	sessDir := s.sessDir(userID)
 	entries, err := os.ReadDir(sessDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -46,7 +50,7 @@ func (s *SessionStore) CurrentSession(userID string) (string, error) {
 }
 
 func (s *SessionStore) ReadLastMessages(userID, sessionID string, n int) ([]*schema.Message, error) {
-	path := filepath.Join(s.dir, userID, "sessions", sessionID+".jsonl")
+	path := filepath.Join(s.sessDir(userID), sessionID+".jsonl")
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -91,7 +95,7 @@ func (s *SessionStore) LoadSession(userID string, windowSize int) (string, []*sc
 }
 
 func (s *SessionStore) Append(userID, sessionID, role, content string) error {
-	sessDir := filepath.Join(s.dir, userID, "sessions")
+	sessDir := s.sessDir(userID)
 	if err := os.MkdirAll(sessDir, 0750); err != nil {
 		return fmt.Errorf("creating session dir: %w", err)
 	}
@@ -109,11 +113,11 @@ func (s *SessionStore) Append(userID, sessionID, role, content string) error {
 }
 
 func (s *SessionStore) sessionPath(userID, sessionID string) string {
-	return filepath.Join(s.dir, userID, "sessions", sessionID+".jsonl")
+	return filepath.Join(s.sessDir(userID), sessionID+".jsonl")
 }
 
 func (s *SessionStore) cursorPath(userID, sessionID string) string {
-	return filepath.Join(s.dir, userID, "sessions", sessionID+".swept_until")
+	return filepath.Join(s.sessDir(userID), sessionID+".swept_until")
 }
 
 func (s *SessionStore) ReadCursor(userID, sessionID string) (int, error) {
@@ -169,7 +173,7 @@ func (s *SessionStore) ReadFrom(userID, sessionID string, fromLine int) ([]*sche
 }
 
 func (s *SessionStore) NewSession(userID string) (string, error) {
-	sessDir := filepath.Join(s.dir, userID, "sessions")
+	sessDir := s.sessDir(userID)
 	if err := os.MkdirAll(sessDir, 0750); err != nil {
 		return "", fmt.Errorf("creating session dir: %w", err)
 	}

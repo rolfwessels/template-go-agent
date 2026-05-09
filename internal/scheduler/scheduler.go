@@ -54,7 +54,16 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	if all != nil {
 		s.schedules = all
 	}
+	total := s.totalCount()
+	next := s.nextSchedule()
 	s.mu.Unlock()
+
+	if next != nil {
+		slog.Info("scheduler started", "schedules", total, "next", next.Prompt, "in", humanDuration(time.Until(time.Unix(next.NextFireAt, 0))))
+	} else {
+		slog.Info("scheduler started", "schedules", total)
+	}
+
 	s.wg.Add(1)
 	go s.run()
 	return nil
@@ -70,6 +79,7 @@ func (s *Scheduler) Add(_ context.Context, schedule *Schedule) error {
 	s.schedules[schedule.UserID] = append(s.schedules[schedule.UserID], schedule)
 	copy := cloneSlice(s.schedules[schedule.UserID])
 	s.mu.Unlock()
+	slog.Info("schedule added", "id", schedule.ID, "prompt", schedule.Prompt, "in", humanDuration(time.Until(time.Unix(schedule.NextFireAt, 0))))
 	return s.store.Save(schedule.UserID, copy)
 }
 
@@ -113,11 +123,13 @@ func (s *Scheduler) fire(ctx context.Context, now time.Time) {
 	s.mu.Unlock()
 
 	for _, sc := range due {
+		slog.Info("schedule firing", "id", sc.ID, "prompt", sc.Prompt)
 		resp, err := s.pool.Send(ctx, sc.UserID, sc.ChannelID, "[Scheduled reminder] "+sc.Prompt)
 		if err != nil {
 			slog.Error("agent send failed for schedule", "id", sc.ID, "err", err)
 			continue
 		}
+		slog.Info("schedule sending response", "id", sc.ID, "channel", sc.ChannelID)
 		if err := s.platform.SendMessage(ctx, sc.ChannelID, resp); err != nil {
 			slog.Error("platform send failed for schedule", "id", sc.ID, "err", err)
 		}
@@ -153,6 +165,42 @@ func (s *Scheduler) advanceOrRemove(sc *Schedule) {
 			existing.NextFireAt += sc.IntervalSeconds
 			return
 		}
+	}
+}
+
+func (s *Scheduler) totalCount() int {
+	n := 0
+	for _, ss := range s.schedules {
+		n += len(ss)
+	}
+	return n
+}
+
+func (s *Scheduler) nextSchedule() *Schedule {
+	var next *Schedule
+	for _, ss := range s.schedules {
+		for _, sc := range ss {
+			if next == nil || sc.NextFireAt < next.NextFireAt {
+				next = sc
+			}
+		}
+	}
+	return next
+}
+
+func humanDuration(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
 	}
 }
 

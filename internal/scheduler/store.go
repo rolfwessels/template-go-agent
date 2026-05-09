@@ -46,7 +46,8 @@ func (s *ScheduleStore) Save(userID string, schedules []*Schedule) error {
 }
 
 func (s *ScheduleStore) LoadAll() (map[string][]*Schedule, error) {
-	des, err := os.ReadDir(s.dir)
+	usersDir := filepath.Join(s.dir, "user")
+	des, err := os.ReadDir(usersDir)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -71,5 +72,5 @@ func (s *ScheduleStore) LoadAll() (map[string][]*Schedule, error) {
 }
 
 func (s *ScheduleStore) path(userID string) string {
-	return filepath.Join(s.dir, userID, "schedule.json")
+	return filepath.Join(s.dir, "user", userID, "schedule", "schedule.json")
 }

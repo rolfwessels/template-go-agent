@@ -24,7 +24,7 @@ func TestSessionStore_CurrentSession_NoneExists(t *testing.T) {
 func TestSessionStore_CurrentSession_ReturnsLatest(t *testing.T) {
 	dir := t.TempDir()
 	store := NewSessionStore(dir)
-	sessDir := filepath.Join(dir, "user1", "sessions")
+	sessDir := filepath.Join(dir, "user", "user1", "sessions")
 	require.NoError(t, os.MkdirAll(sessDir, 0750))
 	require.NoError(t, os.WriteFile(filepath.Join(sessDir, "0000000001000000000.jsonl"), []byte{}, 0600))
 	require.NoError(t, os.WriteFile(filepath.Join(sessDir, "0000000002000000000.jsonl"), []byte{}, 0600))
@@ -97,7 +97,7 @@ func TestSessionStore_Append_ZeroPaddedFilename(t *testing.T) {
 
 	require.NoError(t, store.Append("user1", sessID, "user", "hello"))
 
-	sessDir := filepath.Join(dir, "user1", "sessions")
+	sessDir := filepath.Join(dir, "user", "user1", "sessions")
 	entries, err := os.ReadDir(sessDir)
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
@@ -117,7 +117,7 @@ func TestSessionStore_ReadCursor_ReturnsZeroWhenMissing(t *testing.T) {
 func TestSessionStore_WriteCursor_PersistsCursor(t *testing.T) {
 	dir := t.TempDir()
 	store := NewSessionStore(dir)
-	sessDir := filepath.Join(dir, "user1", "sessions")
+	sessDir := filepath.Join(dir, "user", "user1", "sessions")
 	require.NoError(t, os.MkdirAll(sessDir, 0750))
 
 	require.NoError(t, store.WriteCursor("user1", "sess-1", 42))

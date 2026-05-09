@@ -50,7 +50,7 @@ func TestSweeper_WritesMarkdownFilesOnDestroy(t *testing.T) {
 	require.NoError(t, sweeper.OnDestroy(context.Background(), "alice", "sess-1", nil))
 
 	// assert
-	entries, err := os.ReadDir(filepath.Join(storeDir, "alice"))
+	entries, err := os.ReadDir(filepath.Join(storeDir, "user", "alice", "memory"))
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, date+".md", entries[0].Name())
@@ -81,7 +81,7 @@ func TestSweeper_SkipsEmptyHistory(t *testing.T) {
 	require.NoError(t, sweeper.OnDestroy(context.Background(), "carol", "sess-1", nil))
 
 	// assert — no files written
-	_, err := os.ReadDir(filepath.Join(storeDir, "carol"))
+	_, err := os.ReadDir(filepath.Join(storeDir, "user", "carol", "memory"))
 	assert.True(t, os.IsNotExist(err))
 }
 
@@ -150,10 +150,10 @@ func TestSweeper_NoOpWhenCursorAtEOF(t *testing.T) {
 	require.NoError(t, sweeper.OnDestroy(context.Background(), "grace", "sess-1", nil))
 
 	// assert — fact appears exactly once in the store file
-	entries, err := os.ReadDir(filepath.Join(storeDir, "grace"))
+	entries, err := os.ReadDir(filepath.Join(storeDir, "user", "grace", "memory"))
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
-	data, _ := os.ReadFile(filepath.Join(storeDir, "grace", entries[0].Name()))
+	data, _ := os.ReadFile(filepath.Join(storeDir, "user", "grace", "memory", entries[0].Name()))
 	count := strings.Count(string(data), "only once")
 	assert.Equal(t, 1, count)
 }

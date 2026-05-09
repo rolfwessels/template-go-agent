@@ -24,7 +24,7 @@ func NewFileStore(dir string) *FileStore {
 }
 
 func (s *FileStore) Save(_ context.Context, e Entry) error {
-	userDir := filepath.Join(s.dir, e.UserID)
+	userDir := filepath.Join(s.dir, "user", e.UserID, "memory")
 	if err := os.MkdirAll(userDir, 0750); err != nil {
 		return fmt.Errorf("creating memory dir: %w", err)
 	}
@@ -48,7 +48,7 @@ func (s *FileStore) Save(_ context.Context, e Entry) error {
 }
 
 func (s *FileStore) All(_ context.Context, userID string) ([]Entry, error) {
-	userDir := filepath.Join(s.dir, userID)
+	userDir := filepath.Join(s.dir, "user", userID, "memory")
 	des, err := os.ReadDir(userDir)
 	if os.IsNotExist(err) {
 		return nil, nil

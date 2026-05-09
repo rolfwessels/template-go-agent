@@ -45,15 +45,15 @@ func run() error {
 
 	slog.Info("starting", "version", version)
 
-	fileStore := memory.NewFileStore(".storage/memory")
-	sessions := memory.NewSessionStore(".storage/memory")
+	fileStore := memory.NewFileStore(".storage")
+	sessions := memory.NewSessionStore(".storage")
 
 	distiller, err := memory.NewLLMDistiller(ctx, cfg.OpenAIAPIKey, cfg.OpenAIModel)
 	if err != nil {
 		return fmt.Errorf("creating distiller: %w", err)
 	}
 
-	vectorStore := memory.NewChromemStoreOrWarn(ctx, cfg.OllamaBaseURL, ".storage/memory")
+	vectorStore := memory.NewChromemStoreOrWarn(ctx, cfg.OllamaBaseURL, ".storage")
 
 	sweeper := memory.NewSweeper(fileStore, vectorStore, distiller, sessions)
 
@@ -103,8 +103,7 @@ func run() error {
 		fmt.Printf("template-go-agent v%s — type your question and press Enter (Ctrl+C to quit)\n", version)
 		adapter = cli.New()
 	}
-	schedStore := scheduler.NewStore(".storage/schedules")
-	sched = scheduler.New(schedStore, pool, adapter)
+	sched = scheduler.New(scheduler.NewStore(".storage"), pool, adapter)
 
 	result := runPlatform(ctx, pool, adapter, sched)
 	slog.Info("shutting down")
