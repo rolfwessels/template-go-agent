@@ -65,7 +65,7 @@ func TestSweeper_WritesCorrectFilesOnDestroy(t *testing.T) {
 	date := time.Now().UTC().Format("2006-01-02")
 
 	// act
-	require.NoError(t, sweeper.OnDestroy(context.Background(), "alice", "sess-1", nil))
+	require.NoError(t, sweeper.OnEvict(context.Background(), "alice", "sess-1"))
 
 	// assert — general.md, daily/{date}.md, and MEMORY.md all created
 	_, err := os.Stat(filepath.Join(storeDir, "user", "alice", "memory", "general.md"))
@@ -88,7 +88,7 @@ func TestSweeper_MemoryMdUsesMarkdownLinks(t *testing.T) {
 	date := time.Now().UTC().Format("2006-01-02")
 
 	// act
-	require.NoError(t, sweeper.OnDestroy(context.Background(), "bob", "sess-1", nil))
+	require.NoError(t, sweeper.OnEvict(context.Background(), "bob", "sess-1"))
 
 	// assert — MEMORY.md uses Markdown link syntax with LLM summary
 	data, err := os.ReadFile(filepath.Join(store.MemoryDir("bob"), "MEMORY.md"))
@@ -107,7 +107,7 @@ func TestSweeper_AdvancesCursorAfterSweep(t *testing.T) {
 	require.NoError(t, sessions.Append("eve", "sess-1", "assistant", "resp1"))
 
 	// act
-	require.NoError(t, sweeper.OnDestroy(context.Background(), "eve", "sess-1", nil))
+	require.NoError(t, sweeper.OnEvict(context.Background(), "eve", "sess-1"))
 
 	// assert — cursor moved to 2 (both lines processed)
 	cursor, err := sessions.ReadCursor("eve", "sess-1")
@@ -127,7 +127,7 @@ func TestSweeper_LayeredWrite_GeneralFactInBothFiles(t *testing.T) {
 	date := time.Now().UTC().Format("2006-01-02")
 
 	// act
-	require.NoError(t, sweeper.OnDestroy(context.Background(), "alice", "sess-1", nil))
+	require.NoError(t, sweeper.OnEvict(context.Background(), "alice", "sess-1"))
 
 	// assert — general fact written to both general.md and daily/{date}.md
 	generalData, err := os.ReadFile(filepath.Join(storeDir, "user", "alice", "memory", "general.md"))
@@ -150,7 +150,7 @@ func TestSweeper_LayeredWrite_UntaggedFactInDailyOnly(t *testing.T) {
 	date := time.Now().UTC().Format("2006-01-02")
 
 	// act
-	require.NoError(t, sweeper.OnDestroy(context.Background(), "alice", "sess-1", nil))
+	require.NoError(t, sweeper.OnEvict(context.Background(), "alice", "sess-1"))
 
 	// assert — untagged fact in daily only, not in general.md
 	dailyData, err := os.ReadFile(filepath.Join(storeDir, "user", "alice", "memory", "daily", date+".md"))
@@ -171,12 +171,12 @@ func TestSweeper_PassesExistingDailyContent(t *testing.T) {
 
 	// first sweep writes a fact
 	require.NoError(t, sessions.Append("alice", "sess-1", "user", "first msg"))
-	require.NoError(t, sweeper.OnDestroy(context.Background(), "alice", "sess-1", nil))
+	require.NoError(t, sweeper.OnEvict(context.Background(), "alice", "sess-1"))
 
 	// second sweep — distiller should receive the daily file content from the first sweep
 	capturer.facts = nil
 	require.NoError(t, sessions.Append("alice", "sess-1", "user", "second msg"))
-	require.NoError(t, sweeper.OnDestroy(context.Background(), "alice", "sess-1", nil))
+	require.NoError(t, sweeper.OnEvict(context.Background(), "alice", "sess-1"))
 
 	// assert — existing daily content was passed to the distiller
 	assert.Contains(t, capturer.receivedExisting, "first fact")
@@ -189,7 +189,7 @@ func TestSweeper_SkipsEmptyHistory(t *testing.T) {
 	sweeper := NewSweeper(store, distiller, sessions)
 
 	// act — no session messages appended
-	require.NoError(t, sweeper.OnDestroy(context.Background(), "carol", "sess-1", nil))
+	require.NoError(t, sweeper.OnEvict(context.Background(), "carol", "sess-1"))
 
 	// assert — no files written
 	_, err := os.ReadDir(filepath.Join(storeDir, "user", "carol", "memory"))
@@ -205,12 +205,12 @@ func TestSweeper_PartialSweep_OnlyProcessesNewMessages(t *testing.T) {
 	require.NoError(t, sessions.Append("frank", "sess-1", "assistant", "resp1"))
 
 	// first sweep — processes 2 messages
-	require.NoError(t, sweeper.OnDestroy(context.Background(), "frank", "sess-1", nil))
+	require.NoError(t, sweeper.OnEvict(context.Background(), "frank", "sess-1"))
 	firstCount := distiller.lastCount
 
 	// add 1 more message then sweep again
 	require.NoError(t, sessions.Append("frank", "sess-1", "user", "msg2"))
-	require.NoError(t, sweeper.OnDestroy(context.Background(), "frank", "sess-1", nil))
+	require.NoError(t, sweeper.OnEvict(context.Background(), "frank", "sess-1"))
 	secondCount := distiller.lastCount
 
 	assert.Equal(t, 2, firstCount)
@@ -225,10 +225,10 @@ func TestSweeper_NoOpWhenCursorAtEOF(t *testing.T) {
 	require.NoError(t, sessions.Append("grace", "sess-1", "user", "msg"))
 
 	// first sweep writes the fact
-	require.NoError(t, sweeper.OnDestroy(context.Background(), "grace", "sess-1", nil))
+	require.NoError(t, sweeper.OnEvict(context.Background(), "grace", "sess-1"))
 
 	// act — second sweep with cursor at EOF should be no-op
-	require.NoError(t, sweeper.OnDestroy(context.Background(), "grace", "sess-1", nil))
+	require.NoError(t, sweeper.OnEvict(context.Background(), "grace", "sess-1"))
 
 	// assert — fact appears exactly once in general.md
 	data, _ := os.ReadFile(filepath.Join(storeDir, "user", "grace", "memory", "general.md"))

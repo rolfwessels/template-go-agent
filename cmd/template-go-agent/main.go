@@ -84,7 +84,7 @@ func run() error {
 			return agent.New(ctx, cfg, opts...)
 		},
 		time.Duration(cfg.SessionTimeoutMinutes)*time.Minute,
-		sweeper.OnDestroy,
+		sweeper,
 		agent.WithSessionProvider(sessions, cfg.ConversationHistoryWindowSize),
 		agent.WithSessionCreator(sessions),
 		agent.WithRecordHook(func(userID, sessionID, role, content string) {

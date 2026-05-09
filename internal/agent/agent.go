@@ -32,7 +32,7 @@ func WithMemoryContext(ctx string) Option {
 }
 
 func WithInitialHistory(msgs []*schema.Message) Option {
-	return func(a *Agent) { a.history.log = append(a.history.log, msgs...) }
+	return func(a *Agent) { a.history = append(a.history, msgs...) }
 }
 
 func WithResetCallback(cb func(ctx context.Context) error) Option {
@@ -65,7 +65,7 @@ type Agent struct {
 	memoryContext     string
 	extraInstructions string
 	memoryDir         string
-	history           ConversationHistory
+	history           []*schema.Message
 	resetCallback     func(ctx context.Context) error
 	schedulerBinding  *schedulerBinding
 }
@@ -131,17 +131,15 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 
 func (a *Agent) Generate(ctx context.Context, question string) (string, error) {
 	userMsg := schema.UserMessage(question)
-	msgs := buildMessages(a.systemPrompt, a.memoryContext, a.history.all(), userMsg)
+	msgs := buildMessages(a.systemPrompt, a.memoryContext, a.history, userMsg)
 
 	produced, err := a.react.generate(ctx, msgs)
 	if err != nil {
 		return "", fmt.Errorf("generating response: %w", err)
 	}
 
-	a.history.append(userMsg)
-	for _, msg := range produced {
-		a.history.append(msg)
-	}
+	a.history = append(a.history, userMsg)
+	a.history = append(a.history, produced...)
 	return produced[len(produced)-1].Content, nil
 }
 

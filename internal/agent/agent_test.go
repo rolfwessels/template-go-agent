@@ -97,7 +97,7 @@ func TestGenerate_AllProducedMessagesStoredInHistory(t *testing.T) {
 	// assert
 	require.NoError(t, err)
 	assert.Equal(t, "done", reply)
-	history := a.history.all()
+	history := a.history
 	require.Len(t, history, 4) // user + tool-call + tool-result + final
 	assert.Equal(t, schema.User, history[0].Role)
 	assert.Equal(t, schema.Assistant, history[1].Role)

@@ -72,7 +72,7 @@ func newTestPool(t *testing.T, dir string, distillerFacts []memory.Fact, timeout
 			return agent.NewWithGenerator(makeGen(), "base-prompt", agent.WithMemoryContext(memCtx), agent.WithInitialHistory(history)), nil
 		},
 		timeout,
-		sweeper.OnDestroy,
+		sweeper,
 		agent.WithRecordHook(func(userID, sessionID, role, content string) {
 			_ = sessions.Append(userID, sessionID, role, content)
 		}),

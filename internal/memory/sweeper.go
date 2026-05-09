@@ -19,7 +19,7 @@ func NewSweeper(store *FileStore, distiller Distiller, sessions *SessionStore) *
 	return &Sweeper{store: store, distiller: distiller, sessions: sessions}
 }
 
-func (s *Sweeper) OnDestroy(ctx context.Context, userID, sessionID string, _ []*schema.Message) error {
+func (s *Sweeper) OnEvict(ctx context.Context, userID, sessionID string) error {
 	cursor, err := s.sessions.ReadCursor(userID, sessionID)
 	if err != nil {
 		return fmt.Errorf("reading sweep cursor: %w", err)

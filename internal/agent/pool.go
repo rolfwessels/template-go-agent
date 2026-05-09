@@ -11,7 +11,16 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-type DestroyHook func(ctx context.Context, userID, sessionID string, messages []*schema.Message) error
+type EvictionObserver interface {
+	OnEvict(ctx context.Context, userID, sessionID string) error
+}
+
+type EvictionFunc func(ctx context.Context, userID, sessionID string) error
+
+func (f EvictionFunc) OnEvict(ctx context.Context, userID, sessionID string) error {
+	return f(ctx, userID, sessionID)
+}
+
 type RecordHook func(userID, sessionID, role, content string)
 
 type AgentFactory func(ctx context.Context, userID, channelID string, history []*schema.Message) (*Agent, error)
@@ -35,7 +44,7 @@ type AgentPool struct {
 	agents         map[string]*poolEntry
 	factory        AgentFactory
 	timeout        time.Duration
-	hook           DestroyHook
+	observer       EvictionObserver
 	recorder       RecordHook
 	sessions       SessionProvider
 	sessionCreator SessionCreator
@@ -57,12 +66,12 @@ func WithSessionCreator(sc SessionCreator) func(*AgentPool) {
 	return func(p *AgentPool) { p.sessionCreator = sc }
 }
 
-func NewPool(factory AgentFactory, timeout time.Duration, hook DestroyHook, opts ...func(*AgentPool)) *AgentPool {
+func NewPool(factory AgentFactory, timeout time.Duration, observer EvictionObserver, opts ...func(*AgentPool)) *AgentPool {
 	p := &AgentPool{
-		agents:  make(map[string]*poolEntry),
-		factory: factory,
-		timeout: timeout,
-		hook:    hook,
+		agents:   make(map[string]*poolEntry),
+		factory:  factory,
+		timeout:  timeout,
+		observer: observer,
 	}
 	for _, o := range opts {
 		o(p)
@@ -106,7 +115,7 @@ func (p *AgentPool) Shutdown(ctx context.Context) error {
 		go func(uid string, e *poolEntry) {
 			defer wg.Done()
 			e.timer.Stop()
-			if err := p.callHook(ctx, uid, e.sessionID, e.agent.history.all()); err != nil {
+			if err := p.callObserver(ctx, uid, e.sessionID); err != nil {
 				slog.Error("memory sweep failed on shutdown", "userID", uid, "err", err)
 				mu.Lock()
 				errs = append(errs, fmt.Errorf("sweep for %s: %w", uid, err))
@@ -130,7 +139,7 @@ func (p *AgentPool) Reset(ctx context.Context, userID string) error {
 
 	e.timer.Stop()
 	slog.Info("session reset started", "userID", userID, "sessionID", e.sessionID)
-	if err := p.callHook(ctx, userID, e.sessionID, e.agent.history.all()); err != nil {
+	if err := p.callObserver(ctx, userID, e.sessionID); err != nil {
 		return fmt.Errorf("sweeping session on reset: %w", err)
 	}
 	if p.sessionCreator != nil {
@@ -201,14 +210,14 @@ func (p *AgentPool) destroy(ctx context.Context, userID string) {
 
 	e.timer.Stop()
 	slog.Info("agent session destroyed", "userID", userID, "sessionID", e.sessionID)
-	if err := p.callHook(ctx, userID, e.sessionID, e.agent.history.all()); err != nil {
+	if err := p.callObserver(ctx, userID, e.sessionID); err != nil {
 		slog.Error("memory sweep failed on eviction", "userID", userID, "err", err)
 	}
 }
 
-func (p *AgentPool) callHook(ctx context.Context, userID, sessionID string, messages []*schema.Message) error {
-	if p.hook != nil {
-		return p.hook(ctx, userID, sessionID, messages)
+func (p *AgentPool) callObserver(ctx context.Context, userID, sessionID string) error {
+	if p.observer != nil {
+		return p.observer.OnEvict(ctx, userID, sessionID)
 	}
 	return nil
 }

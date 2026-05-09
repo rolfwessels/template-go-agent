@@ -54,8 +54,8 @@ func TestAgentPool_IsolatedHistories(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	require.Len(t, created, 2)
-	assert.Len(t, created[0].history.all(), 4)
-	assert.Len(t, created[1].history.all(), 2)
+	assert.Len(t, created[0].history, 4)
+	assert.Len(t, created[1].history, 2)
 }
 
 func TestAgentPool_TimeoutCreatesNewAgent(t *testing.T) {
@@ -89,12 +89,12 @@ func TestAgentPool_DestroyHookCalledOnShutdown(t *testing.T) {
 		mu        sync.Mutex
 		hookCalls []string
 	)
-	hook := func(_ context.Context, userID, _ string, _ []*schema.Message) error {
+	hook := EvictionFunc(func(_ context.Context, userID, _ string) error {
 		mu.Lock()
 		hookCalls = append(hookCalls, userID)
 		mu.Unlock()
 		return nil
-	}
+	})
 	pool := NewPool(stubFactory(), time.Minute, hook)
 	ctx := context.Background()
 
@@ -112,10 +112,10 @@ func TestAgentPool_DestroyHookCalledOnShutdown(t *testing.T) {
 func TestAgentPool_DestroyHookCalledOnTimeout(t *testing.T) {
 	// arrange
 	called := make(chan string, 1)
-	hook := func(_ context.Context, userID, _ string, _ []*schema.Message) error {
+	hook := EvictionFunc(func(_ context.Context, userID, _ string) error {
 		called <- userID
 		return nil
-	}
+	})
 	pool := NewPool(stubFactory(), 20*time.Millisecond, hook)
 	ctx := context.Background()
 
