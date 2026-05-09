@@ -105,12 +105,8 @@ func run() error {
 	}
 	schedStore := scheduler.NewStore(".storage/schedules")
 	sched = scheduler.New(schedStore, pool, adapter)
-	if err := sched.Start(ctx); err != nil {
-		return fmt.Errorf("starting scheduler: %w", err)
-	}
-	defer sched.Stop()
 
-	result := runPlatform(ctx, pool, adapter)
+	result := runPlatform(ctx, pool, adapter, sched)
 	slog.Info("shutting down")
 	if err := pool.Shutdown(context.Background()); err != nil {
 		slog.Error("shutdown completed with errors", "err", err)
@@ -118,11 +114,16 @@ func run() error {
 	return result
 }
 
-func runPlatform(ctx context.Context, pool *agent.AgentPool, p platform.MessagePlatform) error {
+func runPlatform(ctx context.Context, pool *agent.AgentPool, p platform.MessagePlatform, sched *scheduler.Scheduler) error {
 	if err := p.Connect(ctx); err != nil {
 		return fmt.Errorf("connecting platform: %w", err)
 	}
 	defer func() { _ = p.Disconnect(ctx) }()
+
+	if err := sched.Start(ctx); err != nil {
+		return fmt.Errorf("starting scheduler: %w", err)
+	}
+	defer sched.Stop()
 
 	msgs, err := p.ReceiveMessages(ctx)
 	if err != nil {

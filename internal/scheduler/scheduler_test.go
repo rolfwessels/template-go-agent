@@ -257,6 +257,37 @@ func TestScheduler_Start_LoadsFromDisk(t *testing.T) {
 	assert.Equal(t, sc.ID, list[0].ID)
 }
 
+func TestScheduler_SurvivesRestart_ScheduleFires(t *testing.T) {
+	// arrange — first "process run": create and persist a due schedule
+	dir := t.TempDir()
+	store := scheduler.NewStore(dir)
+	pool := &fakeAgentSender{response: "ok"}
+	plat := &fakePlatform{}
+
+	sched1 := scheduler.New(store, pool, plat)
+	ctx := context.Background()
+	sc := &scheduler.Schedule{
+		ID: "restart-1", UserID: "user-1", ChannelID: "chan-1",
+		Prompt:     "restart reminder",
+		NextFireAt: time.Now().Add(-time.Second).Unix(),
+	}
+	require.NoError(t, sched1.Add(ctx, sc))
+
+	// act — second "process run": new scheduler loads from disk and fires
+	tickCh := make(chan time.Time, 1)
+	sched2 := scheduler.New(store, pool, plat, scheduler.WithTickCh(tickCh))
+	require.NoError(t, sched2.Start(ctx))
+	t.Cleanup(sched2.Stop)
+
+	tickCh <- time.Now()
+	require.Eventually(t, func() bool { return pool.callCount() == 1 }, time.Second, 5*time.Millisecond)
+
+	// assert — fired once, one-shot removed
+	assert.Equal(t, 1, pool.callCount())
+	assert.Equal(t, 1, plat.callCount())
+	assert.Empty(t, sched2.ListForUser("user-1"))
+}
+
 // --- fakes ---
 
 type fakeAgentSender struct {
