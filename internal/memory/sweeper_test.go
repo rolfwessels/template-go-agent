@@ -18,25 +18,28 @@ type stubDistiller struct {
 	summary string
 }
 
-func (s *stubDistiller) Distill(_ context.Context, _ []*schema.Message) ([]Fact, error) {
-	return s.facts, nil
-}
-
-func (s *stubDistiller) Summarize(_ context.Context, _ []Fact) (string, error) {
-	return s.summary, nil
+func (s *stubDistiller) DistillAndSummarize(_ context.Context, _ string, _ []*schema.Message) ([]Fact, string, error) {
+	return s.facts, s.summary, nil
 }
 
 type countingDistiller struct {
 	lastCount int
 }
 
-func (d *countingDistiller) Distill(_ context.Context, msgs []*schema.Message) ([]Fact, error) {
+func (d *countingDistiller) DistillAndSummarize(_ context.Context, _ string, msgs []*schema.Message) ([]Fact, string, error) {
 	d.lastCount = len(msgs)
-	return nil, nil
+	return nil, "", nil
 }
 
-func (d *countingDistiller) Summarize(_ context.Context, _ []Fact) (string, error) {
-	return "", nil
+type capturingDistiller struct {
+	receivedExisting string
+	facts            []Fact
+	summary          string
+}
+
+func (c *capturingDistiller) DistillAndSummarize(_ context.Context, existingDaily string, _ []*schema.Message) ([]Fact, string, error) {
+	c.receivedExisting = existingDaily
+	return c.facts, c.summary, nil
 }
 
 func newSweeperFixture(t *testing.T) (storeDir string, store *FileStore, sessions *SessionStore) {
@@ -112,22 +115,71 @@ func TestSweeper_AdvancesCursorAfterSweep(t *testing.T) {
 	assert.Equal(t, 2, cursor)
 }
 
-func TestSweeper_DailyFactDateTaggedByLLM(t *testing.T) {
-	// arrange — distiller returns a fact with a specific date tag
+func TestSweeper_LayeredWrite_GeneralFactInBothFiles(t *testing.T) {
+	// arrange
 	storeDir, store, sessions := newSweeperFixture(t)
 	distiller := &stubDistiller{
-		facts:   []Fact{{Content: "user watched a show", Kind: KindDaily, Date: "2026-04-18"}},
-		summary: "Watched a show.",
+		facts:   []Fact{{Content: "user prefers Go", Kind: KindGeneral}},
+		summary: "User prefers Go.",
 	}
 	sweeper := NewSweeper(store, distiller, sessions)
 	require.NoError(t, sessions.Append("alice", "sess-1", "user", "msg"))
+	date := time.Now().UTC().Format("2006-01-02")
 
 	// act
 	require.NoError(t, sweeper.OnDestroy(context.Background(), "alice", "sess-1", nil))
 
-	// assert — written to daily/2026-04-18.md (LLM-supplied date), not today
-	_, err := os.Stat(filepath.Join(storeDir, "user", "alice", "memory", "daily", "2026-04-18.md"))
+	// assert — general fact written to both general.md and daily/{date}.md
+	generalData, err := os.ReadFile(filepath.Join(storeDir, "user", "alice", "memory", "general.md"))
 	require.NoError(t, err)
+	assert.Contains(t, string(generalData), "user prefers Go")
+
+	dailyData, err := os.ReadFile(filepath.Join(storeDir, "user", "alice", "memory", "daily", date+".md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(dailyData), "user prefers Go")
+}
+
+func TestSweeper_LayeredWrite_UntaggedFactInDailyOnly(t *testing.T) {
+	// arrange
+	storeDir, store, sessions := newSweeperFixture(t)
+	distiller := &stubDistiller{
+		facts: []Fact{{Content: "user watched a movie", Kind: KindDaily}},
+	}
+	sweeper := NewSweeper(store, distiller, sessions)
+	require.NoError(t, sessions.Append("alice", "sess-1", "user", "msg"))
+	date := time.Now().UTC().Format("2006-01-02")
+
+	// act
+	require.NoError(t, sweeper.OnDestroy(context.Background(), "alice", "sess-1", nil))
+
+	// assert — untagged fact in daily only, not in general.md
+	dailyData, err := os.ReadFile(filepath.Join(storeDir, "user", "alice", "memory", "daily", date+".md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(dailyData), "user watched a movie")
+
+	_, err = os.Stat(filepath.Join(storeDir, "user", "alice", "memory", "general.md"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestSweeper_PassesExistingDailyContent(t *testing.T) {
+	// arrange
+	_, store, sessions := newSweeperFixture(t)
+	capturer := &capturingDistiller{
+		facts: []Fact{{Content: "first fact", Kind: KindDaily}},
+	}
+	sweeper := NewSweeper(store, capturer, sessions)
+
+	// first sweep writes a fact
+	require.NoError(t, sessions.Append("alice", "sess-1", "user", "first msg"))
+	require.NoError(t, sweeper.OnDestroy(context.Background(), "alice", "sess-1", nil))
+
+	// second sweep — distiller should receive the daily file content from the first sweep
+	capturer.facts = nil
+	require.NoError(t, sessions.Append("alice", "sess-1", "user", "second msg"))
+	require.NoError(t, sweeper.OnDestroy(context.Background(), "alice", "sess-1", nil))
+
+	// assert — existing daily content was passed to the distiller
+	assert.Contains(t, capturer.receivedExisting, "first fact")
 }
 
 func TestSweeper_SkipsEmptyHistory(t *testing.T) {
@@ -161,9 +213,8 @@ func TestSweeper_PartialSweep_OnlyProcessesNewMessages(t *testing.T) {
 	require.NoError(t, sweeper.OnDestroy(context.Background(), "frank", "sess-1", nil))
 	secondCount := distiller.lastCount
 
-	// +1 per sweep for the injected date-header message
-	assert.Equal(t, 3, firstCount)
-	assert.Equal(t, 2, secondCount)
+	assert.Equal(t, 2, firstCount)
+	assert.Equal(t, 1, secondCount)
 }
 
 func TestSweeper_NoOpWhenCursorAtEOF(t *testing.T) {

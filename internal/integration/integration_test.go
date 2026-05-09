@@ -54,12 +54,8 @@ type stubDistiller struct {
 	facts []memory.Fact
 }
 
-func (d *stubDistiller) Distill(_ context.Context, _ []*schema.Message) ([]memory.Fact, error) {
-	return d.facts, nil
-}
-
-func (d *stubDistiller) Summarize(_ context.Context, _ []memory.Fact) (string, error) {
-	return "", nil
+func (d *stubDistiller) DistillAndSummarize(_ context.Context, _ string, _ []*schema.Message) ([]memory.Fact, string, error) {
+	return d.facts, "", nil
 }
 
 // newTestPool creates an AgentPool wired to a temp FileStore, SessionStore, and stub distiller.

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 )
 
 type FileStore struct {
@@ -18,23 +17,34 @@ func NewFileStore(dir string) *FileStore {
 	return &FileStore{dir: dir}
 }
 
-func (s *FileStore) Save(_ context.Context, userID string, fact Fact) error {
+func (s *FileStore) Save(_ context.Context, userID, date string, fact Fact) error {
 	memDir := s.MemoryDir(userID)
 	if err := os.MkdirAll(memDir, 0750); err != nil {
 		return fmt.Errorf("creating memory dir: %w", err)
-	}
-	if fact.Kind == KindGeneral {
-		return s.appendFact(filepath.Join(memDir, "general.md"), fact.Content)
 	}
 	dailyDir := filepath.Join(memDir, "daily")
 	if err := os.MkdirAll(dailyDir, 0750); err != nil {
 		return fmt.Errorf("creating daily dir: %w", err)
 	}
-	date := fact.Date
-	if date == "" {
-		date = time.Now().UTC().Format("2006-01-02")
+	if err := s.appendFact(filepath.Join(dailyDir, date+".md"), fact.Content); err != nil {
+		return err
 	}
-	return s.appendFact(filepath.Join(dailyDir, date+".md"), fact.Content)
+	if fact.Kind == KindGeneral {
+		return s.appendFact(filepath.Join(memDir, "general.md"), fact.Content)
+	}
+	return nil
+}
+
+func (s *FileStore) ReadDailyFile(userID, date string) (string, error) {
+	path := filepath.Join(s.MemoryDir(userID), "daily", date+".md")
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("reading daily file: %w", err)
+	}
+	return string(data), nil
 }
 
 func (s *FileStore) appendFact(path, content string) error {

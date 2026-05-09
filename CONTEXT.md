@@ -29,8 +29,12 @@ All per-user assets live under `.storage/user/{user_id}/`: `memory/` for Long-te
 _Avoid_: Flat per-asset directories at the storage root
 
 **Long-term Memory**:
-Distilled facts, preferences, or outcomes extracted from the Session Log by the Memory Sweep. Survives across Sessions. Stored under `memory/` as three file types: `MEMORY.md` (index, always loaded into the system prompt), `general.md` (stable facts, always loaded), and `daily/{date}.md` (time-sensitive facts for a specific date, browsed on demand via `read_memory_file`). The Distiller classifies each fact as `general` or `daily`; the Sweeper writes to the appropriate file and rebuilds `MEMORY.md` after each run.
+Distilled facts, preferences, or outcomes extracted from the Session Log by the Memory Sweep. Survives across Sessions. Stored under `memory/` as three file types: `MEMORY.md` (index, always loaded into the system prompt), `general.md` (stable facts, always loaded), and `daily/{date}.md` (all facts recorded on that date, browsed on demand via `read_memory_file`). The Distiller classifies each fact as `[general]` or untagged; **every fact is written to the daily file for the date of the messages it was extracted from**; `[general]` facts are additionally written to `general.md`. This layered model means daily files hold full detail, `MEMORY.md` holds navigable summaries, and `general.md` holds stable cross-day patterns that are always in context.
 _Avoid_: Memory (unqualified), knowledge base
+
+**Memory Distiller**:
+The LLM component responsible for a single combined operation per date per Memory Sweep: given the existing content of `daily/{date}.md` and the new messages for that date, it extracts new facts not already recorded, classifies each as `[general]` or untagged, and produces one updated summary sentence covering all facts in the daily file. Interface: `DistillAndSummarize(ctx, existingDaily string, messages) (facts, summary, err)`.
+_Avoid_: Distiller (unqualified when the operation is ambiguous), summarizer
 
 **Memory Sweep**:
 The summarization pass that reads unprocessed messages from the Session Log and distills what is worth keeping into Long-term Memory. Triggered by: inactivity timeout, explicit session reset (tool call), or application shutdown (SIGTERM/SIGINT). Processes only messages since the last sweep (tracked via the Sweep Cursor); on explicit reset it sweeps before starting the new Session.
@@ -87,6 +91,8 @@ _Avoid_: Schedule store, schedule log
 - **Eino spike required** (see ADR-0002): before building AgentPool or any agent logic, verify that Eino's OpenAI provider + Tavily tool + ReAct loop works end-to-end in a throwaway program. If the spike fails, the framework choice must be revisited.
 
 ## Stretch goals (not day-one scope)
+
+- **Topic Distiller** — a periodic process that scans `general.md`, identifies fact clusters (e.g. "wines", "games"), promotes them into `topics/{name}.md` files, and feeds those topic files as context back to the Memory Distiller. Allows long-term memory to self-organise into labelled topics rather than a flat list. `general.md` acts as a staging area until a cluster is large enough to warrant its own topic.
 
 - **Langfuse observability** — integration work done but activation deferred. When added, opt-in via `LANGFUSE_SECRET_KEY` env var; absent = no-op callback.
 - **GraphQL adapter** — see platform delivery order above.

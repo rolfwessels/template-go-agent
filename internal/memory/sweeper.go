@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
-	"time"
 
 	"github.com/cloudwego/eino/schema"
 )
@@ -40,57 +39,36 @@ func (s *Sweeper) OnDestroy(ctx context.Context, userID, sessionID string, _ []*
 	}
 	slog.Info("memory sweep started", "userID", userID, "sessionID", sessionID, "messages", msgCount, "dates", len(dates))
 
-	facts, err := s.distiller.Distill(ctx, batchWithDateHeaders(dates, byDate))
-	if err != nil {
-		return fmt.Errorf("distilling memories for %s: %w", userID, err)
-	}
-	slog.Info("memory sweep complete", "userID", userID, "facts", len(facts))
-
-	dailyByDate := make(map[string][]Fact)
-	for _, fact := range facts {
-		if err := s.store.Save(ctx, userID, fact); err != nil {
-			slog.Warn("memory fact store failed", "userID", userID, "err", err)
-			continue
-		}
-		slog.Info("memory fact stored", "userID", userID, "kind", fact.Kind, "date", fact.Date, "fact", fact.Content)
-		if fact.Kind == KindDaily {
-			dailyByDate[fact.Date] = append(dailyByDate[fact.Date], fact)
-		}
-	}
-
 	summaries := make(map[string]string)
-	for date, dailyFacts := range dailyByDate {
-		rel := "daily/" + resolveDate(date) + ".md"
-		summary, err := s.distiller.Summarize(ctx, dailyFacts)
+	totalFacts := 0
+	for _, date := range dates {
+		existing, err := s.store.ReadDailyFile(userID, date)
 		if err != nil {
-			slog.Warn("memory summary failed", "userID", userID, "date", date, "err", err)
+			slog.Warn("memory read daily file failed", "userID", userID, "date", date, "err", err)
+		}
+		facts, summary, err := s.distiller.DistillAndSummarize(ctx, existing, byDate[date])
+		if err != nil {
+			slog.Warn("memory distill failed", "userID", userID, "date", date, "err", err)
 			continue
 		}
+		for _, fact := range facts {
+			if err := s.store.Save(ctx, userID, date, fact); err != nil {
+				slog.Warn("memory fact store failed", "userID", userID, "err", err)
+				continue
+			}
+			slog.Info("memory fact stored", "userID", userID, "kind", fact.Kind, "date", date, "fact", fact.Content)
+		}
+		totalFacts += len(facts)
 		if summary != "" {
-			summaries[rel] = summary
+			summaries["daily/"+date+".md"] = summary
 		}
 	}
+	slog.Info("memory sweep complete", "userID", userID, "facts", totalFacts)
 
 	if err := s.store.UpdateIndex(userID, summaries); err != nil {
 		slog.Warn("memory index update failed", "userID", userID, "err", err)
 	}
 	return s.sessions.WriteCursor(userID, sessionID, total)
-}
-
-func batchWithDateHeaders(dates []string, byDate map[string][]*schema.Message) []*schema.Message {
-	var all []*schema.Message
-	for _, date := range dates {
-		all = append(all, schema.UserMessage("--- "+date+" ---"))
-		all = append(all, byDate[date]...)
-	}
-	return all
-}
-
-func resolveDate(date string) string {
-	if date == "" {
-		return time.Now().UTC().Format("2006-01-02")
-	}
-	return date
 }
 
 func sortedKeys(m map[string][]*schema.Message) []string {

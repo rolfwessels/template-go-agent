@@ -18,7 +18,8 @@ func TestFileStore_SaveGeneral_CreatesGeneralFile(t *testing.T) {
 	store := NewFileStore(dir)
 
 	// act
-	err := store.Save(context.Background(), "alice", Fact{Content: "Alice likes Go", Kind: KindGeneral})
+	date := time.Now().UTC().Format("2006-01-02")
+	err := store.Save(context.Background(), "alice", date, Fact{Content: "Alice likes Go", Kind: KindGeneral})
 
 	// assert
 	require.NoError(t, err)
@@ -34,7 +35,7 @@ func TestFileStore_SaveDaily_CreatesDailyFile(t *testing.T) {
 	date := time.Now().UTC().Format("2006-01-02")
 
 	// act
-	err := store.Save(context.Background(), "alice", Fact{Content: "meeting today", Kind: KindDaily})
+	err := store.Save(context.Background(), "alice", date, Fact{Content: "meeting today", Kind: KindDaily})
 
 	// assert
 	require.NoError(t, err)
@@ -50,8 +51,9 @@ func TestFileStore_SaveGeneral_AppendsFacts(t *testing.T) {
 	ctx := context.Background()
 
 	// act
-	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "fact one", Kind: KindGeneral}))
-	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "fact two", Kind: KindGeneral}))
+	date := time.Now().UTC().Format("2006-01-02")
+	require.NoError(t, store.Save(ctx, "alice", date, Fact{Content: "fact one", Kind: KindGeneral}))
+	require.NoError(t, store.Save(ctx, "alice", date, Fact{Content: "fact two", Kind: KindGeneral}))
 
 	// assert
 	data, err := os.ReadFile(filepath.Join(dir, "user", "alice", "memory", "general.md"))
@@ -67,8 +69,8 @@ func TestFileStore_UpdateIndex_UsesMarkdownLinks(t *testing.T) {
 	store := NewFileStore(dir)
 	ctx := context.Background()
 	date := time.Now().UTC().Format("2006-01-02")
-	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "pref", Kind: KindGeneral}))
-	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "event", Kind: KindDaily}))
+	require.NoError(t, store.Save(ctx, "alice", date, Fact{Content: "pref", Kind: KindGeneral}))
+	require.NoError(t, store.Save(ctx, "alice", date, Fact{Content: "event", Kind: KindDaily}))
 
 	// act
 	err := store.UpdateIndex("alice", map[string]string{
@@ -91,7 +93,7 @@ func TestFileStore_UpdateIndex_DefaultDescriptionWhenNoSummary(t *testing.T) {
 	store := NewFileStore(dir)
 	ctx := context.Background()
 	date := time.Now().UTC().Format("2006-01-02")
-	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "event", Kind: KindDaily}))
+	require.NoError(t, store.Save(ctx, "alice", date, Fact{Content: "event", Kind: KindDaily}))
 
 	// act — pass empty summaries map
 	require.NoError(t, store.UpdateIndex("alice", map[string]string{}))
@@ -106,7 +108,8 @@ func TestFileStore_UpdateIndex_OmitsGeneralWhenAbsent(t *testing.T) {
 	dir := t.TempDir()
 	store := NewFileStore(dir)
 	ctx := context.Background()
-	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "event", Kind: KindDaily}))
+	date := time.Now().UTC().Format("2006-01-02")
+	require.NoError(t, store.Save(ctx, "alice", date, Fact{Content: "event", Kind: KindDaily}))
 
 	// act
 	require.NoError(t, store.UpdateIndex("alice", nil))
@@ -122,7 +125,7 @@ func TestFileStore_UpdateIndex_PreservesExistingSummaries(t *testing.T) {
 	store := NewFileStore(dir)
 	ctx := context.Background()
 	date := time.Now().UTC().Format("2006-01-02")
-	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "event", Kind: KindDaily}))
+	require.NoError(t, store.Save(ctx, "alice", date, Fact{Content: "event", Kind: KindDaily}))
 	// First sweep writes a good summary
 	require.NoError(t, store.UpdateIndex("alice", map[string]string{
 		"daily/" + date + ".md": "Original great summary.",
@@ -142,7 +145,7 @@ func TestFileStore_UpdateIndex_NewSummaryOverridesOld(t *testing.T) {
 	store := NewFileStore(dir)
 	ctx := context.Background()
 	date := time.Now().UTC().Format("2006-01-02")
-	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "event", Kind: KindDaily}))
+	require.NoError(t, store.Save(ctx, "alice", date, Fact{Content: "event", Kind: KindDaily}))
 	require.NoError(t, store.UpdateIndex("alice", map[string]string{
 		"daily/" + date + ".md": "Old summary.",
 	}))
@@ -163,7 +166,8 @@ func TestFileStore_AllAsContext_IncludesMemoryIndexAndGeneral(t *testing.T) {
 	dir := t.TempDir()
 	store := NewFileStore(dir)
 	ctx := context.Background()
-	require.NoError(t, store.Save(ctx, "alice", Fact{Content: "Alice likes Go", Kind: KindGeneral}))
+	date := time.Now().UTC().Format("2006-01-02")
+	require.NoError(t, store.Save(ctx, "alice", date, Fact{Content: "Alice likes Go", Kind: KindGeneral}))
 	require.NoError(t, store.UpdateIndex("alice", nil))
 
 	// act
@@ -193,7 +197,8 @@ func TestFileStore_GeneralFileHasHeader(t *testing.T) {
 	store := NewFileStore(dir)
 
 	// act
-	require.NoError(t, store.Save(context.Background(), "carol", Fact{Content: "a fact", Kind: KindGeneral}))
+	date := time.Now().UTC().Format("2006-01-02")
+	require.NoError(t, store.Save(context.Background(), "carol", date, Fact{Content: "a fact", Kind: KindGeneral}))
 
 	// assert
 	data, _ := os.ReadFile(filepath.Join(dir, "user", "carol", "memory", "general.md"))
