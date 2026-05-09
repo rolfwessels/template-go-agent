@@ -265,7 +265,7 @@ type fakeAgentSender struct {
 	response string
 }
 
-func (f *fakeAgentSender) Send(_ context.Context, _, _ string) (string, error) {
+func (f *fakeAgentSender) Send(_ context.Context, _, _, _ string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++

@@ -67,7 +67,7 @@ func newTestPool(t *testing.T, dir string, distillerFacts []string, timeout time
 	sweeper := memory.NewSweeper(fileStore, nil, &stubDistiller{facts: distillerFacts}, sessions)
 
 	pool := agent.NewPool(
-		func(ctx context.Context, userID string, history []*schema.Message) (*agent.Agent, error) {
+		func(ctx context.Context, userID, _ string, history []*schema.Message) (*agent.Agent, error) {
 			memCtx, _ := fileStore.AllAsContext(ctx, userID)
 			return agent.NewWithGenerator(makeGen(), "base-prompt", agent.WithMemoryContext(memCtx), agent.WithInitialHistory(history)), nil
 		},
@@ -86,7 +86,7 @@ func TestIntegration_MultiTurnPreservesContext(t *testing.T) {
 	// arrange
 	gen := &spyGenerator{response: "ok"}
 	pool := agent.NewPool(
-		func(_ context.Context, _ string, _ []*schema.Message) (*agent.Agent, error) {
+		func(_ context.Context, _, _ string, _ []*schema.Message) (*agent.Agent, error) {
 			return agent.NewWithGenerator(gen, "sys"), nil
 		},
 		time.Minute,
@@ -95,8 +95,8 @@ func TestIntegration_MultiTurnPreservesContext(t *testing.T) {
 	ctx := context.Background()
 
 	// act — two turns from the same user
-	_, err1 := pool.Send(ctx, "user1", "first question")
-	_, err2 := pool.Send(ctx, "user1", "second question")
+	_, err1 := pool.Send(ctx, "user1", "", "first question")
+	_, err2 := pool.Send(ctx, "user1", "", "second question")
 	require.NoError(t, err1)
 	require.NoError(t, err2)
 
@@ -116,7 +116,7 @@ func TestIntegration_TimeoutTriggersMemorySweep(t *testing.T) {
 	})
 
 	// act — send a message then wait for inactivity timeout
-	_, err := pool.Send(ctx, "alice", "something memorable")
+	_, err := pool.Send(ctx, "alice", "", "something memorable")
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
@@ -136,8 +136,8 @@ func TestIntegration_ShutdownTriggersSweepForAllAgents(t *testing.T) {
 	})
 
 	// act — two different users, then shutdown
-	_, _ = pool.Send(ctx, "user1", "hello")
-	_, _ = pool.Send(ctx, "user2", "hello")
+	_, _ = pool.Send(ctx, "user1", "", "hello")
+	_, _ = pool.Send(ctx, "user2", "", "hello")
 	require.NoError(t, pool.Shutdown(ctx))
 
 	// assert — both users have memory files
@@ -164,13 +164,13 @@ func TestIntegration_MemoryFromPreviousSessionInjectedInNext(t *testing.T) {
 
 	// session 1 — facts are distilled on shutdown
 	pool1, _ := newTestPool(t, dir, []string{"user's favourite language is Go"}, time.Minute, makeGen)
-	_, err := pool1.Send(ctx, "bob", "I love Go")
+	_, err := pool1.Send(ctx, "bob", "", "I love Go")
 	require.NoError(t, err)
 	pool1.Shutdown(ctx)
 
 	// session 2 — new pool, same file store dir; factory loads prior memories
 	pool2, _ := newTestPool(t, dir, nil, time.Minute, makeGen)
-	_, err = pool2.Send(ctx, "bob", "what do you know about me?")
+	_, err = pool2.Send(ctx, "bob", "", "what do you know about me?")
 	require.NoError(t, err)
 
 	// assert — session 2's system prompt contains the fact from session 1
@@ -203,16 +203,16 @@ func TestIntegration_SessionResetClearsHistoryAndPreservesLongTermMemory(t *test
 	pool, _ := newTestPool(t, dir, []string{"user likes cats"}, time.Minute, makeGen)
 
 	// act — build up some conversation history
-	_, err := pool.Send(ctx, "carol", "I love cats")
+	_, err := pool.Send(ctx, "carol", "", "I love cats")
 	require.NoError(t, err)
-	_, err = pool.Send(ctx, "carol", "cats are the best")
+	_, err = pool.Send(ctx, "carol", "", "cats are the best")
 	require.NoError(t, err)
 
 	// simulate new_session tool invocation
 	require.NoError(t, pool.Reset(ctx, "carol"))
 
 	// first message in the new session
-	_, err = pool.Send(ctx, "carol", "hello again")
+	_, err = pool.Send(ctx, "carol", "", "hello again")
 	require.NoError(t, err)
 
 	// assert — two agents were created: one before reset, one after

@@ -14,7 +14,7 @@ import (
 type DestroyHook func(ctx context.Context, userID, sessionID string, messages []*schema.Message) error
 type RecordHook func(userID, sessionID, role, content string)
 
-type AgentFactory func(ctx context.Context, userID string, history []*schema.Message) (*Agent, error)
+type AgentFactory func(ctx context.Context, userID, channelID string, history []*schema.Message) (*Agent, error)
 
 type SessionProvider interface {
 	LoadSession(userID string, windowSize int) (sessionID string, history []*schema.Message, err error)
@@ -70,8 +70,8 @@ func NewPool(factory AgentFactory, timeout time.Duration, hook DestroyHook, opts
 	return p
 }
 
-func (p *AgentPool) Send(ctx context.Context, userID, message string) (string, error) {
-	e, err := p.getOrCreate(ctx, userID)
+func (p *AgentPool) Send(ctx context.Context, userID, channelID, message string) (string, error) {
+	e, err := p.getOrCreate(ctx, userID, channelID)
 	if err != nil {
 		return "", err
 	}
@@ -142,7 +142,7 @@ func (p *AgentPool) Reset(ctx context.Context, userID string) error {
 	return nil
 }
 
-func (p *AgentPool) getOrCreate(ctx context.Context, userID string) (*poolEntry, error) {
+func (p *AgentPool) getOrCreate(ctx context.Context, userID, channelID string) (*poolEntry, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -155,7 +155,7 @@ func (p *AgentPool) getOrCreate(ctx context.Context, userID string) (*poolEntry,
 		return nil, err
 	}
 
-	a, err := p.factory(ctx, userID, history)
+	a, err := p.factory(ctx, userID, channelID, history)
 	if err != nil {
 		return nil, err
 	}

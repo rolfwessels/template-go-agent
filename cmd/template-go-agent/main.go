@@ -16,6 +16,7 @@ import (
 	"github.com/rolfwessels/template-go-agent/internal/platform"
 	"github.com/rolfwessels/template-go-agent/internal/platform/cli"
 	"github.com/rolfwessels/template-go-agent/internal/platform/discord"
+	"github.com/rolfwessels/template-go-agent/internal/scheduler"
 )
 
 var version = "dev"
@@ -61,9 +62,12 @@ func run() error {
 		platformInstructions = discord.Instructions()
 	}
 
-	var pool *agent.AgentPool
+	var (
+		pool *agent.AgentPool
+		sched *scheduler.Scheduler
+	)
 	pool = agent.NewPool(
-		func(ctx context.Context, userID string, history []*schema.Message) (*agent.Agent, error) {
+		func(ctx context.Context, userID, channelID string, history []*schema.Message) (*agent.Agent, error) {
 			memCtx, _ := fileStore.AllAsContext(ctx, userID)
 			opts := []agent.Option{
 				agent.WithMemoryContext(memCtx),
@@ -74,6 +78,9 @@ func run() error {
 			}
 			if platformInstructions != "" {
 				opts = append(opts, agent.WithExtraInstructions(platformInstructions))
+			}
+			if sched != nil {
+				opts = append(opts, agent.WithScheduler(sched, userID, channelID))
 			}
 			return agent.New(ctx, cfg, opts...)
 		},
@@ -96,6 +103,13 @@ func run() error {
 		fmt.Printf("template-go-agent v%s — type your question and press Enter (Ctrl+C to quit)\n", version)
 		adapter = cli.New()
 	}
+	schedStore := scheduler.NewStore(".storage/schedules")
+	sched = scheduler.New(schedStore, pool, adapter)
+	if err := sched.Start(ctx); err != nil {
+		return fmt.Errorf("starting scheduler: %w", err)
+	}
+	defer sched.Stop()
+
 	result := runPlatform(ctx, pool, adapter)
 	slog.Info("shutting down")
 	if err := pool.Shutdown(context.Background()); err != nil {
@@ -116,7 +130,7 @@ func runPlatform(ctx context.Context, pool *agent.AgentPool, p platform.MessageP
 	}
 
 	for msg := range msgs {
-		answer, err := pool.Send(ctx, msg.UserID, msg.Content)
+		answer, err := pool.Send(ctx, msg.UserID, msg.ChannelID, msg.Content)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			continue

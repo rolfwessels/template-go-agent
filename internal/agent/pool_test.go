@@ -21,7 +21,7 @@ func (f *fakeSessionProvider) LoadSession(_ string, _ int) (string, []*schema.Me
 }
 
 func stubFactory() AgentFactory {
-	return func(_ context.Context, _ string, _ []*schema.Message) (*Agent, error) {
+	return func(_ context.Context, _, _ string, _ []*schema.Message) (*Agent, error) {
 		return &Agent{react: newFakeGenerator("ok"), systemPrompt: "sys"}, nil
 	}
 }
@@ -32,7 +32,7 @@ func TestAgentPool_IsolatedHistories(t *testing.T) {
 		mu      sync.Mutex
 		created []*Agent
 	)
-	factory := func(_ context.Context, _ string, _ []*schema.Message) (*Agent, error) {
+	factory := func(_ context.Context, _, _ string, _ []*schema.Message) (*Agent, error) {
 		a := &Agent{react: newFakeGenerator("ok"), systemPrompt: "sys"}
 		mu.Lock()
 		created = append(created, a)
@@ -43,9 +43,9 @@ func TestAgentPool_IsolatedHistories(t *testing.T) {
 	ctx := context.Background()
 
 	// act
-	_, err1 := pool.Send(ctx, "user1", "first")
-	_, err2 := pool.Send(ctx, "user2", "first")
-	_, err3 := pool.Send(ctx, "user1", "second")
+	_, err1 := pool.Send(ctx, "user1", "", "first")
+	_, err2 := pool.Send(ctx, "user2", "", "first")
+	_, err3 := pool.Send(ctx, "user1", "", "second")
 	require.NoError(t, err1)
 	require.NoError(t, err2)
 	require.NoError(t, err3)
@@ -61,7 +61,7 @@ func TestAgentPool_IsolatedHistories(t *testing.T) {
 func TestAgentPool_TimeoutCreatesNewAgent(t *testing.T) {
 	// arrange
 	var count int
-	factory := func(_ context.Context, _ string, _ []*schema.Message) (*Agent, error) {
+	factory := func(_ context.Context, _, _ string, _ []*schema.Message) (*Agent, error) {
 		count++
 		return &Agent{react: newFakeGenerator("ok"), systemPrompt: "sys"}, nil
 	}
@@ -69,14 +69,14 @@ func TestAgentPool_TimeoutCreatesNewAgent(t *testing.T) {
 	ctx := context.Background()
 
 	// act — first message creates agent
-	_, err := pool.Send(ctx, "user1", "hello")
+	_, err := pool.Send(ctx, "user1", "", "hello")
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 
 	time.Sleep(60 * time.Millisecond)
 
 	// second message after timeout creates a fresh agent
-	_, err = pool.Send(ctx, "user1", "hello again")
+	_, err = pool.Send(ctx, "user1", "", "hello again")
 	require.NoError(t, err)
 
 	// assert
@@ -99,8 +99,8 @@ func TestAgentPool_DestroyHookCalledOnShutdown(t *testing.T) {
 	ctx := context.Background()
 
 	// act
-	_, _ = pool.Send(ctx, "user1", "hello")
-	_, _ = pool.Send(ctx, "user2", "hello")
+	_, _ = pool.Send(ctx, "user1", "", "hello")
+	_, _ = pool.Send(ctx, "user2", "", "hello")
 	require.NoError(t, pool.Shutdown(ctx))
 
 	// assert
@@ -120,7 +120,7 @@ func TestAgentPool_DestroyHookCalledOnTimeout(t *testing.T) {
 	ctx := context.Background()
 
 	// act
-	_, err := pool.Send(ctx, "user1", "hello")
+	_, err := pool.Send(ctx, "user1", "", "hello")
 	require.NoError(t, err)
 
 	// assert
@@ -149,10 +149,10 @@ func TestAgentPool_SessionIDStableAcrossEviction(t *testing.T) {
 	ctx := context.Background()
 
 	// act
-	_, err := pool.Send(ctx, "user1", "hello")
+	_, err := pool.Send(ctx, "user1", "", "hello")
 	require.NoError(t, err)
 	time.Sleep(60 * time.Millisecond) // wait for eviction
-	_, err = pool.Send(ctx, "user1", "hello again")
+	_, err = pool.Send(ctx, "user1", "", "hello again")
 	require.NoError(t, err)
 
 	// assert — both sends use the same session ID from the provider
@@ -175,7 +175,7 @@ func TestAgentPool_RecreatedAgentLoadsHistory(t *testing.T) {
 		factoryCount int
 		capturedHist []*schema.Message
 	)
-	factory := func(_ context.Context, _ string, h []*schema.Message) (*Agent, error) {
+	factory := func(_ context.Context, _, _ string, h []*schema.Message) (*Agent, error) {
 		mu.Lock()
 		factoryCount++
 		capturedHist = h
@@ -186,9 +186,9 @@ func TestAgentPool_RecreatedAgentLoadsHistory(t *testing.T) {
 	ctx := context.Background()
 
 	// act
-	_, _ = pool.Send(ctx, "user1", "hello")
+	_, _ = pool.Send(ctx, "user1", "", "hello")
 	time.Sleep(60 * time.Millisecond) // wait for eviction
-	_, _ = pool.Send(ctx, "user1", "hello again")
+	_, _ = pool.Send(ctx, "user1", "", "hello again")
 
 	// assert — factory called twice and second call received history from provider
 	mu.Lock()

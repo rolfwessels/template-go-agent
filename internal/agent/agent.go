@@ -42,6 +42,18 @@ func WithExtraInstructions(s string) Option {
 	return func(a *Agent) { a.extraInstructions = s }
 }
 
+type schedulerBinding struct {
+	manager   ScheduleManager
+	userID    string
+	channelID string
+}
+
+func WithScheduler(manager ScheduleManager, userID, channelID string) Option {
+	return func(a *Agent) {
+		a.schedulerBinding = &schedulerBinding{manager: manager, userID: userID, channelID: channelID}
+	}
+}
+
 type Agent struct {
 	react             msgGenerator
 	systemPrompt      string
@@ -49,6 +61,7 @@ type Agent struct {
 	extraInstructions string
 	history           ConversationHistory
 	resetCallback     func(ctx context.Context) error
+	schedulerBinding  *schedulerBinding
 }
 
 func NewWithGenerator(gen Generator, systemPrompt string, opts ...Option) *Agent {
@@ -76,6 +89,13 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 	tools := []tool.BaseTool{newTavilyTool(cfg.TavilyAPIKey), newCurrentTimeTool(), newDateMathTool(), newHTTPFetchTool(), newCalculatorTool()}
 	if a.resetCallback != nil {
 		tools = append(tools, newNewSessionTool(a.resetCallback))
+	}
+	if sb := a.schedulerBinding; sb != nil {
+		tools = append(tools,
+			newScheduleReminderTool(sb.manager, sb.userID, sb.channelID),
+			newListRemindersTool(sb.manager, sb.userID),
+			newCancelReminderTool(sb.manager, sb.userID),
+		)
 	}
 
 	ra, err := react.NewAgent(ctx, &react.AgentConfig{

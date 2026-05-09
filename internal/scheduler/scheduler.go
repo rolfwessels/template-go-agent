@@ -9,7 +9,7 @@ import (
 )
 
 type AgentSender interface {
-	Send(ctx context.Context, userID, message string) (string, error)
+	Send(ctx context.Context, userID, channelID, message string) (string, error)
 }
 
 type MessageSender interface {
@@ -113,7 +113,7 @@ func (s *Scheduler) fire(ctx context.Context, now time.Time) {
 	s.mu.Unlock()
 
 	for _, sc := range due {
-		resp, err := s.pool.Send(ctx, sc.UserID, "[Scheduled reminder] "+sc.Prompt)
+		resp, err := s.pool.Send(ctx, sc.UserID, sc.ChannelID, "[Scheduled reminder] "+sc.Prompt)
 		if err != nil {
 			slog.Error("agent send failed for schedule", "id", sc.ID, "err", err)
 			continue

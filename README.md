@@ -9,7 +9,7 @@ A Go template for hybrid AI agents — conversational at the surface, with auton
 
 The agent receives a message from a platform adapter (CLI or Discord), runs a ReAct reasoning loop (calling tools as needed), and sends back a grounded answer. Its persona and instructions are loaded from `prompts/soul.md` and `prompts/instructions.md` at startup — edit those files to customise the agent's identity and behaviour.
 
-Built-in tools: `web_search`, `http_fetch`, `get_current_time`, `date_math`, `calculate`, `new_session`.
+Built-in tools: `web_search`, `http_fetch`, `get_current_time`, `date_math`, `calculate`, `new_session`, `schedule_reminder`, `list_reminders`, `cancel_reminder`.
 
 ```bash
 # copy and populate env vars
