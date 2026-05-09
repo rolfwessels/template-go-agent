@@ -53,9 +53,7 @@ func run() error {
 		return fmt.Errorf("creating distiller: %w", err)
 	}
 
-	vectorStore := memory.NewChromemStoreOrWarn(ctx, cfg.OllamaBaseURL, ".storage")
-
-	sweeper := memory.NewSweeper(fileStore, vectorStore, distiller, sessions)
+	sweeper := memory.NewSweeper(fileStore, distiller, sessions)
 
 	var platformInstructions string
 	if cfg.DiscordToken != "" {

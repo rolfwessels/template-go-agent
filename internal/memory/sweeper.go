@@ -15,13 +15,12 @@ type Distiller interface {
 
 type Sweeper struct {
 	store     *FileStore
-	vector    VectorStore
 	distiller Distiller
 	sessions  *SessionStore
 }
 
-func NewSweeper(store *FileStore, vector VectorStore, distiller Distiller, sessions *SessionStore) *Sweeper {
-	return &Sweeper{store: store, vector: vector, distiller: distiller, sessions: sessions}
+func NewSweeper(store *FileStore, distiller Distiller, sessions *SessionStore) *Sweeper {
+	return &Sweeper{store: store, distiller: distiller, sessions: sessions}
 }
 
 func (s *Sweeper) OnDestroy(ctx context.Context, userID, sessionID string, _ []*schema.Message) error {
@@ -52,9 +51,6 @@ func (s *Sweeper) OnDestroy(ctx context.Context, userID, sessionID string, _ []*
 			continue
 		}
 		slog.Info("memory fact stored", "userID", userID, "entryID", e.ID, "fact", e.Content)
-		if s.vector != nil {
-			_ = s.vector.Add(ctx, e)
-		}
 	}
 	return s.sessions.WriteCursor(userID, sessionID, total)
 }

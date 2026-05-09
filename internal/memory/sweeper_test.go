@@ -41,7 +41,7 @@ func TestSweeper_WritesMarkdownFilesOnDestroy(t *testing.T) {
 	// arrange
 	storeDir, store, sessions := newSweeperFixture(t)
 	distiller := &stubDistiller{facts: []string{"user prefers brevity", "user works in Go"}}
-	sweeper := NewSweeper(store, nil, distiller, sessions)
+	sweeper := NewSweeper(store, distiller, sessions)
 	require.NoError(t, sessions.Append("alice", "sess-1", "user", "hello"))
 	require.NoError(t, sessions.Append("alice", "sess-1", "assistant", "hi"))
 	date := time.Now().UTC().Format("2006-01-02")
@@ -56,26 +56,11 @@ func TestSweeper_WritesMarkdownFilesOnDestroy(t *testing.T) {
 	assert.Equal(t, date+".md", entries[0].Name())
 }
 
-func TestSweeper_CallsVectorStoreForEachFact(t *testing.T) {
-	// arrange
-	_, store, sessions := newSweeperFixture(t)
-	vs := &stubVectorStore{}
-	distiller := &stubDistiller{facts: []string{"fact A", "fact B"}}
-	sweeper := NewSweeper(store, vs, distiller, sessions)
-	require.NoError(t, sessions.Append("bob", "sess-1", "user", "msg"))
-
-	// act
-	require.NoError(t, sweeper.OnDestroy(context.Background(), "bob", "sess-1", nil))
-
-	// assert
-	assert.Len(t, vs.added, 2)
-}
-
 func TestSweeper_SkipsEmptyHistory(t *testing.T) {
 	// arrange
 	storeDir, store, sessions := newSweeperFixture(t)
 	distiller := &stubDistiller{facts: []string{"should not appear"}}
-	sweeper := NewSweeper(store, nil, distiller, sessions)
+	sweeper := NewSweeper(store, distiller, sessions)
 
 	// act — no session messages appended
 	require.NoError(t, sweeper.OnDestroy(context.Background(), "carol", "sess-1", nil))
@@ -85,24 +70,11 @@ func TestSweeper_SkipsEmptyHistory(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
-func TestSweeper_SkipsVectorWhenNil(t *testing.T) {
-	// arrange
-	_, store, sessions := newSweeperFixture(t)
-	distiller := &stubDistiller{facts: []string{"a fact"}}
-	sweeper := NewSweeper(store, nil, distiller, sessions)
-	require.NoError(t, sessions.Append("dave", "sess-1", "user", "msg"))
-
-	// act — should not panic
-	assert.NotPanics(t, func() {
-		require.NoError(t, sweeper.OnDestroy(context.Background(), "dave", "sess-1", nil))
-	})
-}
-
 func TestSweeper_AdvancesCursorAfterSweep(t *testing.T) {
 	// arrange
 	_, store, sessions := newSweeperFixture(t)
 	distiller := &stubDistiller{facts: []string{"a fact"}}
-	sweeper := NewSweeper(store, nil, distiller, sessions)
+	sweeper := NewSweeper(store, distiller, sessions)
 	require.NoError(t, sessions.Append("eve", "sess-1", "user", "msg1"))
 	require.NoError(t, sessions.Append("eve", "sess-1", "assistant", "resp1"))
 
@@ -119,7 +91,7 @@ func TestSweeper_PartialSweep_OnlyProcessesNewMessages(t *testing.T) {
 	// arrange
 	_, store, sessions := newSweeperFixture(t)
 	distiller := &countingDistiller{}
-	sweeper := NewSweeper(store, nil, distiller, sessions)
+	sweeper := NewSweeper(store, distiller, sessions)
 	require.NoError(t, sessions.Append("frank", "sess-1", "user", "msg1"))
 	require.NoError(t, sessions.Append("frank", "sess-1", "assistant", "resp1"))
 
@@ -140,7 +112,7 @@ func TestSweeper_NoOpWhenCursorAtEOF(t *testing.T) {
 	// arrange
 	storeDir, store, sessions := newSweeperFixture(t)
 	distiller := &stubDistiller{facts: []string{"only once"}}
-	sweeper := NewSweeper(store, nil, distiller, sessions)
+	sweeper := NewSweeper(store, distiller, sessions)
 	require.NoError(t, sessions.Append("grace", "sess-1", "user", "msg"))
 
 	// first sweep writes the fact

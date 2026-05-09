@@ -64,7 +64,7 @@ func newTestPool(t *testing.T, dir string, distillerFacts []string, timeout time
 	t.Helper()
 	fileStore := memory.NewFileStore(dir)
 	sessions := memory.NewSessionStore(dir)
-	sweeper := memory.NewSweeper(fileStore, nil, &stubDistiller{facts: distillerFacts}, sessions)
+	sweeper := memory.NewSweeper(fileStore, &stubDistiller{facts: distillerFacts}, sessions)
 
 	pool := agent.NewPool(
 		func(ctx context.Context, userID, _ string, history []*schema.Message) (*agent.Agent, error) {

@@ -31,7 +31,6 @@ func TestLoad_defaults(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "test-openai")
 	t.Setenv("TAVILY_API_KEY", "test-tavily")
 	t.Setenv("OPENAI_MODEL", "")
-	t.Setenv("OLLAMA_BASE_URL", "")
 	t.Setenv("SESSION_TIMEOUT_MINUTES", "")
 	t.Setenv("CONVERSATION_HISTORY_WINDOW_SIZE", "")
 
@@ -39,7 +38,6 @@ func TestLoad_defaults(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "gpt-5.5", cfg.OpenAIModel)
-	assert.Equal(t, "http://localhost:11434/api", cfg.OllamaBaseURL)
 	assert.Equal(t, 30, cfg.SessionTimeoutMinutes)
 	assert.Equal(t, 20, cfg.ConversationHistoryWindowSize)
 }
@@ -48,7 +46,6 @@ func TestLoad_customValues(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "sk-test")
 	t.Setenv("TAVILY_API_KEY", "tvly-test")
 	t.Setenv("OPENAI_MODEL", "gpt-4o")
-	t.Setenv("OLLAMA_BASE_URL", "http://ollama:11434")
 	t.Setenv("SESSION_TIMEOUT_MINUTES", "60")
 
 	cfg, err := Load()
@@ -57,6 +54,5 @@ func TestLoad_customValues(t *testing.T) {
 	assert.Equal(t, "sk-test", cfg.OpenAIAPIKey)
 	assert.Equal(t, "tvly-test", cfg.TavilyAPIKey)
 	assert.Equal(t, "gpt-4o", cfg.OpenAIModel)
-	assert.Equal(t, "http://ollama:11434", cfg.OllamaBaseURL)
 	assert.Equal(t, 60, cfg.SessionTimeoutMinutes)
 }

@@ -12,7 +12,6 @@ type Config struct {
 	OpenAIAPIKey                  string
 	OpenAIModel                   string
 	TavilyAPIKey                  string
-	OllamaBaseURL                 string
 	DiscordToken                  string
 	SessionTimeoutMinutes         int
 	ConversationHistoryWindowSize int
@@ -25,7 +24,6 @@ func Load() (*Config, error) {
 		OpenAIAPIKey:                  os.Getenv("OPENAI_API_KEY"),
 		OpenAIModel:                   envOrDefault("OPENAI_MODEL", "gpt-5.5"),
 		TavilyAPIKey:                  os.Getenv("TAVILY_API_KEY"),
-		OllamaBaseURL:                 envOrDefault("OLLAMA_BASE_URL", "http://localhost:11434/api"),
 		DiscordToken:                  os.Getenv("DISCORD_TOKEN"),
 		SessionTimeoutMinutes:         envIntOrDefault("SESSION_TIMEOUT_MINUTES", 30),
 		ConversationHistoryWindowSize: envIntOrDefault("CONVERSATION_HISTORY_WINDOW_SIZE", 20),
