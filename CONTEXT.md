@@ -25,8 +25,20 @@ The rolling window of recent messages loaded from the Session Log into the Agent
 _Avoid_: Context, full history, message log
 
 **Storage Layout**:
-All per-user assets live under `.storage/user/{user_id}/`: `memory/` for Long-term Memory files, `sessions/` for Session Logs and Sweep Cursors, and `schedule/` for the Schedule File. Application logs go to `.storage/logs/app.log`.
+All per-user assets live under `.storage/user/{user_id}/`: `memory/` for Long-term Memory files, `sessions/` for Session Logs and Sweep Cursors, `schedule/` for the Schedule File, and `metrics/` for the Cost Ledger. Application logs go to `.storage/logs/app.log`.
 _Avoid_: Flat per-asset directories at the storage root
+
+**Cost Ledger**:
+An append-only JSONL file at `.storage/user/{user_id}/metrics/costs.jsonl` that records one entry per LLM call completion. Each entry contains: `timestamp`, `component` (`agent` or `distiller`), `model`, `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost_usd`, and `session_id`. Written by the Usage Tracker on every LLM call via the Eino callback system.
+_Avoid_: Usage log, token log, billing log
+
+**Usage Tracker**:
+The component (`internal/usage`) that intercepts LLM call completions via Eino callbacks, calculates cost using a hardcoded pricing table, writes entries to the Cost Ledger, logs to slog, and maintains process-lifetime atomic token and cost counters for the console status line. Injected into the Agent (via per-agent callback, closing over `userID`) and into the Memory Sweeper (via context-key, since the Sweeper knows `userID` at call time). Unknown model names are priced at $0 with a warning logged.
+_Avoid_: Token tracker, billing tracker, usage logger
+
+**Usage Record**:
+A single entry in the Cost Ledger. Represents one LLM call completion — either an Agent turn or a Memory Distiller invocation.
+_Avoid_: Token record, cost entry
 
 **Long-term Memory**:
 Distilled facts, preferences, or outcomes extracted from the Session Log by the Memory Sweep. Survives across Sessions. Stored under `memory/` as three file types: `MEMORY.md` (index, always loaded into the system prompt), `general.md` (stable facts, always loaded), and `daily/{date}.md` (all facts recorded on that date, browsed on demand via `read_memory_file`). The Distiller classifies each fact as `[general]` or untagged; **every fact is written to the daily file for the date of the messages it was extracted from**; `[general]` facts are additionally written to `general.md`. This layered model means daily files hold full detail, `MEMORY.md` holds navigable summaries, and `general.md` holds stable cross-day patterns that are always in context.
