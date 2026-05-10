@@ -97,7 +97,7 @@ func run() error {
 	var adapter platform.MessagePlatform
 	if cfg.DiscordToken != "" {
 		slog.Info("discord token set — using Discord adapter")
-		adapter = discord.New(cfg.DiscordToken)
+		adapter = discord.New(cfg.DiscordToken, discord.NewWhisperTranscriber(cfg.OpenAIAPIKey))
 	} else {
 		fmt.Printf("template-go-agent v%s — type your question and press Enter (Ctrl+C to quit)\n", version)
 		adapter = cli.New()

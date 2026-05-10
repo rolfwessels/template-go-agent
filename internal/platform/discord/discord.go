@@ -3,6 +3,7 @@ package discord
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -14,19 +15,21 @@ type sender interface {
 }
 
 type Adapter struct {
-	token   string
-	session *discordgo.Session
-	send    sender
-	botID   string
-	msgs    chan platform.Message
+	token       string
+	session     *discordgo.Session
+	send        sender
+	botID       string
+	msgs        chan platform.Message
+	transcriber Transcriber
+	ctx         context.Context
 }
 
-func New(token string) *Adapter {
-	return &Adapter{token: token}
+func New(token string, tr Transcriber) *Adapter {
+	return &Adapter{token: token, transcriber: tr}
 }
 
-func newWithSender(botID string, s sender) *Adapter {
-	return &Adapter{botID: botID, send: s, msgs: make(chan platform.Message, 64)}
+func newWithSender(botID string, s sender, tr Transcriber) *Adapter {
+	return &Adapter{botID: botID, send: s, msgs: make(chan platform.Message, 64), transcriber: tr}
 }
 
 func (a *Adapter) Connect(ctx context.Context) error {
@@ -45,6 +48,7 @@ func (a *Adapter) Connect(ctx context.Context) error {
 		return fmt.Errorf("opening discord connection: %w", err)
 	}
 	a.botID = s.State.User.ID
+	a.ctx = ctx
 
 	go func() {
 		<-ctx.Done()
@@ -68,7 +72,11 @@ func (a *Adapter) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	if content == "" {
-		return
+		transcribed, ok := a.transcribeAttachment(m)
+		if !ok {
+			return
+		}
+		content = transcribed
 	}
 
 	if a.session != nil {
@@ -79,6 +87,27 @@ func (a *Adapter) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	case a.msgs <- platform.Message{UserID: m.Author.ID, ChannelID: m.ChannelID, Content: content}:
 	default:
 	}
+}
+
+func (a *Adapter) transcribeAttachment(m *discordgo.MessageCreate) (string, bool) {
+	if a.transcriber == nil {
+		return "", false
+	}
+	for _, att := range m.Attachments {
+		if !strings.HasPrefix(att.ContentType, "audio/") {
+			continue
+		}
+		slog.Info("voice note received", "channel", m.ChannelID, "user", m.Author.ID, "content_type", att.ContentType)
+		text, err := a.transcriber.Transcribe(a.ctx, att.URL)
+		if err != nil {
+			slog.Error("voice note transcription failed", "err", err, "channel", m.ChannelID)
+			_, _ = a.send.ChannelMessageSend(m.ChannelID, "Sorry, I couldn't transcribe your voice note.")
+			return "", false
+		}
+		slog.Info("voice note transcribed", "channel", m.ChannelID, "user", m.Author.ID, "chars", len(text))
+		return text, true
+	}
+	return "", false
 }
 
 const maxMessageLen = 2000

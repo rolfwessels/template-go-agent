@@ -45,8 +45,12 @@ A line-count integer stored in a `.swept_until` file alongside each Session Log.
 _Avoid_: Offset, pointer, checkpoint
 
 **Platform Adapter**:
-Implements the `MessagePlatform` interface (`Connect`, `SendMessage`, `ReceiveMessages`, `Disconnect`). Bridges an external messaging surface (CLI, Discord, etc.) to the agent loop. Swapping adapters requires no changes to agent logic.
+Implements the `MessagePlatform` interface (`Connect`, `SendMessage`, `ReceiveMessages`, `Disconnect`). Bridges an external messaging surface (CLI, Discord, etc.) to the agent loop. Swapping adapters requires no changes to agent logic. Adapters may accept supplementary dependencies (e.g. a `Transcriber` for audio-to-text) that are injected at construction time via the constructor, keeping the core interface stable.
 _Avoid_: Connector, transport, integration
+
+**Transcriber**:
+An interface (`Transcribe(ctx, audioURL) (string, error)`) consumed by the Discord Platform Adapter to convert audio attachments into text before the message enters the agent pipeline. The default implementation calls OpenAI's Whisper API. Injected into the adapter at construction time; nil disables transcription.
+_Avoid_: Speech-to-text, STT, voice converter
 
 **Tool**:
 A typed, callable capability registered with the agent (e.g. web search). Invoked by the LLM during the ReAct loop within a single turn.
