@@ -19,6 +19,7 @@ type SessionStore struct {
 }
 
 type sessionLine struct {
+	Version   int       `json:"v"`
 	Timestamp time.Time `json:"timestamp"`
 	Role      string    `json:"role"`
 	Content   string    `json:"content"`
@@ -99,7 +100,7 @@ func (s *SessionStore) Append(userID, sessionID, role, content string) error {
 	if err := os.MkdirAll(sessDir, 0750); err != nil {
 		return fmt.Errorf("creating session dir: %w", err)
 	}
-	data, err := json.Marshal(sessionLine{Timestamp: time.Now().UTC(), Role: role, Content: content})
+	data, err := json.Marshal(sessionLine{Version: 1, Timestamp: time.Now().UTC(), Role: role, Content: content})
 	if err != nil {
 		return fmt.Errorf("marshalling session line: %w", err)
 	}

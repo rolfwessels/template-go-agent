@@ -105,6 +105,33 @@ func TestSessionStore_Append_ZeroPaddedFilename(t *testing.T) {
 	assert.Equal(t, sessID+".jsonl", entries[0].Name())
 }
 
+func TestSessionStore_Append_WritesVersionField(t *testing.T) {
+	dir := t.TempDir()
+	store := NewSessionStore(dir)
+	sessID := "sess-v"
+
+	require.NoError(t, store.Append("user1", sessID, "user", "hello"))
+
+	data, err := os.ReadFile(filepath.Join(dir, "user", "user1", "sessions", sessID+".jsonl"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"v":1`)
+}
+
+func TestSessionStore_ReadLastMessages_BackwardCompatibleWithLegacyLines(t *testing.T) {
+	dir := t.TempDir()
+	sessDir := filepath.Join(dir, "user", "user1", "sessions")
+	require.NoError(t, os.MkdirAll(sessDir, 0750))
+	legacy := `{"timestamp":"2026-01-01T00:00:00Z","role":"user","content":"old message"}` + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(sessDir, "sess-legacy.jsonl"), []byte(legacy), 0600))
+	store := NewSessionStore(dir)
+
+	msgs, err := store.ReadLastMessages("user1", "sess-legacy", 10)
+
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "old message", msgs[0].Content)
+}
+
 func TestSessionStore_ReadCursor_ReturnsZeroWhenMissing(t *testing.T) {
 	dir := t.TempDir()
 	store := NewSessionStore(dir)

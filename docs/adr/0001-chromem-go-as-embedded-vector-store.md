@@ -1,5 +1,9 @@
 # chromem-go as the embedded default vector store
 
+**Status: Superseded** — the vector store was removed entirely. See commit `c2c694c` (Remove vector store and Ollama embedding dependency). Long-term memory is now stored as plain Markdown files (`general.md` + `daily/{date}.md`) with keyword-based search via `search_memory` tool, replacing semantic retrieval.
+
+---
+
 Long-term Memory requires a vector store for semantic retrieval. We chose chromem-go as the default embedded store because it is pure Go (no CGO, no external server), has zero third-party dependencies, and persists to gob/gzip files that sit alongside the Markdown memory files — keeping the storage format portable and human-inspectable.
 
 ## Considered Options

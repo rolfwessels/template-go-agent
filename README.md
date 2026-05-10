@@ -22,6 +22,19 @@ make start
 
 Type a question and press Enter. `Ctrl+C` to quit.
 
+## 🗂 What's in place
+
+| Module | Status | Notes |
+|--------|--------|-------|
+| Agent (Eino ReAct loop) | ✅ | Tools, pool, per-user history |
+| Long-term memory | ✅ | Sweep + distill into daily/general files |
+| Platform abstraction | ✅ | CLI and Discord adapters |
+| Scheduler | ✅ | File-backed, background tick, LLM-controlled |
+| Configuration | ✅ | Env-based with validation |
+| Graceful shutdown | ✅ | SIGTERM triggers memory sweep pipeline |
+| Voice transcription | ✅ | Discord voice notes via OpenAI Whisper |
+| CI/CD + Docker | ✅ | Multi-stage image, GitHub Actions release pipeline |
+
 ## 📦 Technology
 
 - [Eino](https://github.com/cloudwego/eino) — ReAct agent loop and OpenAI provider
@@ -123,6 +136,17 @@ make version
 
 Feature branches are created off `main` with the prefix `feature/` or `bug/`.
 PR builds attach archives as workflow artifacts. Merging to `main` publishes them as a new versioned [GitHub release](https://github.com/rolfwessels/template-go-agent/releases).
+
+## 📝 To Do
+
+### Gaps worth addressing
+
+- [x] ~~**Streaming output**~~ — won't do. CLI streaming is trivial but Discord has no native streaming primitive; simulating it requires debounced message edits and a breaking change to the `MessagePlatform` interface. The typing indicator + complete response is the better UX for Discord anyway.
+- [ ] **Langfuse observability** — mentioned in docs, not yet implemented; implement or remove the reference
+- [x] **Session log schema versioning** — `"v":1` added to all written JSONL lines; legacy lines (no `v`) still read cleanly
+- [ ] **Token/cost tracking** — no visibility into per-conversation or per-user token usage; essential at multi-user scale
+- [ ] **Observability/tracing** — no trace IDs per conversation turn; Langfuse or OpenTelemetry would make debugging significantly easier
+- [ ] **Retry/backoff on LLM calls** — exponential backoff on 429/5xx prevents cascading failures when the upstream is degraded
 
 ## FAQ
 
