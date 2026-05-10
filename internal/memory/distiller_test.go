@@ -133,3 +133,31 @@ func TestParseFacts_SkipsBlankLines(t *testing.T) {
 	facts, _ := parseFacts(input)
 	require.Len(t, facts, 2)
 }
+
+func TestParseFacts_StripsLeadingBulletMarkers(t *testing.T) {
+	tests := []struct {
+		name     string
+		give     string
+		wantKind FactKind
+		wantText string
+	}{
+		{name: "dash prefix on daily fact", give: "- event happened", wantKind: KindDaily, wantText: "event happened"},
+		{name: "dash prefix on general fact", give: "- [general] user prefers Go", wantKind: KindGeneral, wantText: "user prefers Go"},
+		{name: "asterisk prefix", give: "* event happened", wantKind: KindDaily, wantText: "event happened"},
+		{name: "double dash prefix", give: "- - event happened", wantKind: KindDaily, wantText: "event happened"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			facts, _ := parseFacts(tt.give)
+			require.Len(t, facts, 1)
+			assert.Equal(t, tt.wantKind, facts[0].Kind)
+			assert.Equal(t, tt.wantText, facts[0].Content)
+		})
+	}
+}
+
+func TestParseFacts_StripsBulletBeforeSummary(t *testing.T) {
+	facts, summary := parseFacts("- [summary] one sentence summary")
+	assert.Empty(t, facts)
+	assert.Equal(t, "one sentence summary", summary)
+}

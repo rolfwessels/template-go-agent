@@ -111,14 +111,14 @@ func TestRunPlatform_StatusLineAccumulatesAcrossTurns(t *testing.T) {
 	assert.Equal(t, statusLines[0], statusLines[1], "counter unchanged by fake sender, both lines are identical zero-state")
 }
 
-func TestRunPlatform_DiscordMode_NoStatusLine(t *testing.T) {
-	// arrange — nil statusWriter simulates Discord mode
+func TestRunPlatform_NilStatusWriter_DoesNotPanic(t *testing.T) {
+	// arrange
 	sender := &fakeSender{responses: []string{"reply"}}
 	p := &fakePlatform{messages: []platform.Message{
 		{UserID: "u1", ChannelID: "c1", Content: "hi"},
 	}}
 
-	// act — must not panic when statusWriter is nil
+	// act
 	err := runPlatform(context.Background(), sender, p, nil)
 
 	// assert

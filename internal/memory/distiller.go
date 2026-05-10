@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"strings"
 
@@ -24,16 +25,8 @@ type Fact struct {
 	Kind    FactKind
 }
 
-const distillAndSummarizePrompt = `You are a memory distiller. You receive the existing content of a daily memory file for a specific date, followed by a conversation from that date where each line is prefixed with "User:" or "Assistant:".
-
-Extract new facts about the user not already present in the existing daily memory. Base facts only on what the user said or confirmed — do not re-extract facts the assistant merely echoed or acknowledged. Classify each as:
-- [general] — stable preferences, background info, or recurring behaviours that rarely change
-- untagged (no prefix) — events or activities specific to this date
-
-Return one fact per line. Do not re-extract facts already recorded.
-
-End your response with exactly one line:
-[summary] <one sentence covering all facts in the daily file, both existing and new combined>`
+//go:embed distiller_prompt.md
+var distillAndSummarizePrompt string
 
 type Distiller interface {
 	DistillAndSummarize(ctx context.Context, existingDaily string, messages []*schema.Message) ([]Fact, string, error)
@@ -114,6 +107,7 @@ func parseFacts(content string) ([]Fact, string) {
 		if line == "" {
 			continue
 		}
+		line = stripBulletPrefix(line)
 		if strings.HasPrefix(line, "[summary]") {
 			summary = strings.TrimSpace(strings.TrimPrefix(line, "[summary]"))
 			continue
@@ -128,5 +122,18 @@ func parseFacts(content string) ([]Fact, string) {
 		}
 	}
 	return facts, summary
+}
+
+func stripBulletPrefix(line string) string {
+	for {
+		switch {
+		case strings.HasPrefix(line, "- "):
+			line = strings.TrimSpace(line[2:])
+		case strings.HasPrefix(line, "* "):
+			line = strings.TrimSpace(line[2:])
+		default:
+			return line
+		}
+	}
 }
 

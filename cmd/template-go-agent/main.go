@@ -101,18 +101,15 @@ func run() error {
 		}),
 	)
 
-	var (
-		adapter      platform.MessagePlatform
-		statusWriter func()
-	)
+	var adapter platform.MessagePlatform
 	if cfg.DiscordToken != "" {
 		slog.Info("discord token set — using Discord adapter")
 		adapter = discord.New(cfg.DiscordToken, discord.NewWhisperTranscriber(cfg.OpenAIAPIKey))
 	} else {
 		fmt.Printf("template-go-agent v%s — type your question and press Enter (Ctrl+C to quit)\n", version)
 		adapter = cli.New()
-		statusWriter = func() { fmt.Fprint(os.Stdout, "\r"+counter.StatusLine()) }
 	}
+	statusWriter := func() { fmt.Fprint(os.Stdout, "\r"+counter.StatusLine()) }
 	sched = scheduler.New(scheduler.NewStore(".storage"), pool, adapter)
 	if err := sched.Start(ctx); err != nil {
 		return fmt.Errorf("starting scheduler: %w", err)

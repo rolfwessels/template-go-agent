@@ -142,10 +142,10 @@ PR builds attach archives as workflow artifacts. Merging to `main` publishes the
 ### Gaps worth addressing
 
 - [x] ~~**Streaming output**~~ — won't do. CLI streaming is trivial but Discord has no native streaming primitive; simulating it requires debounced message edits and a breaking change to the `MessagePlatform` interface. The typing indicator + complete response is the better UX for Discord anyway.
-- [ ] **Langfuse observability** — mentioned in docs, not yet implemented; implement or remove the reference
 - [x] **Session log schema versioning** — `"v":1` added to all written JSONL lines; legacy lines (no `v`) still read cleanly
-- [ ] **Token/cost tracking** — no visibility into per-conversation or per-user token usage; essential at multi-user scale
+- [x] **Token/cost tracking** — no visibility into per-conversation or per-user token usage; essential at multi-user scale
 - [ ] **Observability/tracing** — no trace IDs per conversation turn; Langfuse or OpenTelemetry would make debugging significantly easier
+- [ ] **Langfuse observability** — mentioned in docs, not yet implemented; implement or remove the reference
 - [ ] **Retry/backoff on LLM calls** — exponential backoff on 429/5xx prevents cascading failures when the upstream is degraded
 
 ## FAQ
