@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+const (
+	ComponentAgent     = "agent"
+	ComponentDistiller = "distiller"
+)
+
 type TokenUsage struct {
 	PromptTokens     int
 	CompletionTokens int

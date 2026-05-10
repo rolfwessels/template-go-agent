@@ -11,6 +11,13 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+type sessionIDKey struct{}
+
+func SessionIDFromContext(ctx context.Context) string {
+	s, _ := ctx.Value(sessionIDKey{}).(string)
+	return s
+}
+
 type EvictionObserver interface {
 	OnEvict(ctx context.Context, userID, sessionID string) error
 }
@@ -164,7 +171,7 @@ func (p *AgentPool) getOrCreate(ctx context.Context, userID, channelID string) (
 		return nil, err
 	}
 
-	a, err := p.factory(ctx, userID, channelID, history)
+	a, err := p.factory(context.WithValue(ctx, sessionIDKey{}, sessionID), userID, channelID, history)
 	if err != nil {
 		return nil, err
 	}

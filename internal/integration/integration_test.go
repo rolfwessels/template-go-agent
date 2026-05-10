@@ -1,7 +1,12 @@
 package integration_test
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +19,7 @@ import (
 
 	"github.com/rolfwessels/template-go-agent/internal/agent"
 	"github.com/rolfwessels/template-go-agent/internal/memory"
+	"github.com/rolfwessels/template-go-agent/internal/usage"
 )
 
 // spyGenerator is a stub LLM that returns a fixed response and records what it received.
@@ -232,4 +238,147 @@ func TestIntegration_SessionResetClearsHistoryAndPreservesLongTermMemory(t *test
 	// long-term memory distilled from the swept session should appear in the system prompt
 	assert.Contains(t, calls[0][0].Content, "user likes cats",
 		"post-reset system prompt should contain memory swept from the previous session")
+}
+
+// spyGeneratorWithUsage returns a fixed response with token usage in ResponseMeta.
+type spyGeneratorWithUsage struct {
+	mu       sync.Mutex
+	response string
+	calls    int
+}
+
+func (g *spyGeneratorWithUsage) Generate(_ context.Context, msgs []*schema.Message, _ ...einoagent.AgentOption) (*schema.Message, error) {
+	g.mu.Lock()
+	g.calls++
+	g.mu.Unlock()
+	return &schema.Message{
+		Role:    schema.Assistant,
+		Content: g.response,
+		ResponseMeta: &schema.ResponseMeta{
+			Usage: &schema.TokenUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+		},
+	}, nil
+}
+
+func readLines(t *testing.T, path string) []string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var lines []string
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		if line := scanner.Text(); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+func readLedgerLines(t *testing.T, dir, userID string) []map[string]any {
+	t.Helper()
+	path := filepath.Join(dir, "user", userID, "metrics", "costs.jsonl")
+	var records []map[string]any
+	for _, line := range readLines(t, path) {
+		var r map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &r))
+		records = append(records, r)
+	}
+	return records
+}
+
+func TestIntegration_AgentUsageTrackerWritesToCostLedger(t *testing.T) {
+	// arrange
+	dir := t.TempDir()
+	ctx := context.Background()
+	counter := usage.NewCounter()
+	tracker := usage.NewFileTracker(dir, counter)
+
+	fileStore := memory.NewFileStore(dir)
+	sessions := memory.NewSessionStore(dir)
+	sweeper := memory.NewSweeper(fileStore, &stubDistiller{}, sessions)
+
+	gen := &spyGeneratorWithUsage{response: "ok"}
+	pool := agent.NewPool(
+		func(ctx context.Context, userID, _ string, history []*schema.Message) (*agent.Agent, error) {
+			sessionID := agent.SessionIDFromContext(ctx)
+			return agent.NewWithGenerator(gen, "sys",
+				agent.WithUsageTracker(tracker, userID, sessionID),
+			), nil
+		},
+		time.Minute,
+		sweeper,
+		agent.WithSessionProvider(sessions, 20),
+		agent.WithSessionCreator(sessions),
+	)
+
+	// act
+	_, err := pool.Send(ctx, "alice", "", "hello")
+	require.NoError(t, err)
+
+	// assert
+	records := readLedgerLines(t, dir, "alice")
+	require.NotEmpty(t, records, "cost ledger should have at least one entry")
+	assert.Equal(t, "agent", records[0]["component"])
+	assert.Greater(t, records[0]["prompt_tokens"], float64(0))
+}
+
+func TestIntegration_DistillerUsageTrackerWritesToCostLedger(t *testing.T) {
+	// arrange
+	dir := t.TempDir()
+	ctx := context.Background()
+	counter := usage.NewCounter()
+	tracker := usage.NewFileTracker(dir, counter)
+
+	fileStore := memory.NewFileStore(dir)
+	sessions := memory.NewSessionStore(dir)
+
+	trackingDistiller := &trackableDistiller{
+		delegate: &stubDistiller{facts: []memory.Fact{{Content: "a fact", Kind: memory.KindGeneral}}},
+		tracker:  tracker,
+	}
+	sweeper := memory.NewSweeper(fileStore, trackingDistiller, sessions, memory.WithSweeperTracker(tracker))
+
+	pool := agent.NewPool(
+		func(ctx context.Context, userID, _ string, history []*schema.Message) (*agent.Agent, error) {
+			return agent.NewWithGenerator(&spyGenerator{response: "ok"}, "sys"), nil
+		},
+		time.Minute,
+		sweeper,
+		agent.WithSessionProvider(sessions, 20),
+		agent.WithSessionCreator(sessions),
+		agent.WithRecordHook(func(userID, sessionID, role, content string) {
+			_ = sessions.Append(userID, sessionID, role, content)
+		}),
+	)
+
+	// act — send a message then reset to trigger sweep
+	_, err := pool.Send(ctx, "bob", "", "hello")
+	require.NoError(t, err)
+	require.NoError(t, pool.Reset(ctx, "bob"))
+
+	// assert
+	records := readLedgerLines(t, dir, "bob")
+	var distillerRecords []map[string]any
+	for _, r := range records {
+		if r["component"] == "distiller" {
+			distillerRecords = append(distillerRecords, r)
+		}
+	}
+	require.NotEmpty(t, distillerRecords, "cost ledger should have at least one distiller entry")
+}
+
+type trackableDistiller struct {
+	delegate memory.Distiller
+	tracker  usage.Tracker
+}
+
+func (d *trackableDistiller) DistillAndSummarize(ctx context.Context, existingDaily string, msgs []*schema.Message) ([]memory.Fact, string, error) {
+	facts, summary, err := d.delegate.DistillAndSummarize(ctx, existingDaily, msgs)
+	if err == nil {
+		userID, sessionID := usage.FromContext(ctx)
+		d.tracker.Record(userID, sessionID, "distiller", "test-model", usage.TokenUsage{
+			PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15,
+		})
+	}
+	return facts, summary, err
 }

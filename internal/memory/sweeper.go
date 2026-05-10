@@ -7,19 +7,35 @@ import (
 	"sort"
 
 	"github.com/cloudwego/eino/schema"
+
+	"github.com/rolfwessels/template-go-agent/internal/usage"
 )
 
 type Sweeper struct {
 	store     *FileStore
 	distiller Distiller
 	sessions  *SessionStore
+	tracker   usage.Tracker
 }
 
-func NewSweeper(store *FileStore, distiller Distiller, sessions *SessionStore) *Sweeper {
-	return &Sweeper{store: store, distiller: distiller, sessions: sessions}
+type SweeperOption func(*Sweeper)
+
+func WithSweeperTracker(tracker usage.Tracker) SweeperOption {
+	return func(s *Sweeper) { s.tracker = tracker }
+}
+
+func NewSweeper(store *FileStore, distiller Distiller, sessions *SessionStore, opts ...SweeperOption) *Sweeper {
+	s := &Sweeper{store: store, distiller: distiller, sessions: sessions}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *Sweeper) OnEvict(ctx context.Context, userID, sessionID string) error {
+	if s.tracker != nil {
+		ctx = usage.WithContext(ctx, userID, sessionID)
+	}
 	cursor, err := s.sessions.ReadCursor(userID, sessionID)
 	if err != nil {
 		return fmt.Errorf("reading sweep cursor: %w", err)

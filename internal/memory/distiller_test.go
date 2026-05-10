@@ -1,11 +1,74 @@
 package memory
 
 import (
+	"context"
 	"testing"
 
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/rolfwessels/template-go-agent/internal/usage"
+	"github.com/rolfwessels/template-go-agent/internal/usage/usagetest"
 )
+
+type fakeDistillerModel struct {
+	resp *schema.Message
+}
+
+func (f *fakeDistillerModel) Generate(_ context.Context, _ []*schema.Message, _ ...model.Option) (*schema.Message, error) {
+	return f.resp, nil
+}
+
+func (f *fakeDistillerModel) Stream(_ context.Context, _ []*schema.Message, _ ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	panic("not used in distiller")
+}
+
+func TestLLMDistiller_WithTracker_RecordsDistillerComponent(t *testing.T) {
+	// arrange
+	tracker := &usagetest.StubTracker{}
+	fakeResp := &schema.Message{
+		Role:    schema.Assistant,
+		Content: "[summary] a user who codes",
+		ResponseMeta: &schema.ResponseMeta{
+			Usage: &schema.TokenUsage{PromptTokens: 5, CompletionTokens: 3, TotalTokens: 8},
+		},
+	}
+	d := &llmDistiller{
+		model:     &fakeDistillerModel{resp: fakeResp},
+		modelName: "gpt-test",
+		tracker:   tracker,
+	}
+	ctx := usage.WithContext(context.Background(), "user1", "sess1")
+
+	// act
+	_, _, err := d.DistillAndSummarize(ctx, "", []*schema.Message{schema.UserMessage("hi")})
+
+	// assert
+	require.NoError(t, err)
+	components := tracker.Snapshot()
+	require.Len(t, components, 1)
+	assert.Equal(t, "distiller", components[0])
+}
+
+func TestLLMDistiller_WithTracker_NoRecordWhenNoUsage(t *testing.T) {
+	// arrange
+	tracker := &usagetest.StubTracker{}
+	fakeResp := &schema.Message{Role: schema.Assistant, Content: "[summary] a user"}
+	d := &llmDistiller{
+		model:     &fakeDistillerModel{resp: fakeResp},
+		modelName: "gpt-test",
+		tracker:   tracker,
+	}
+
+	// act
+	_, _, err := d.DistillAndSummarize(context.Background(), "", []*schema.Message{schema.UserMessage("hi")})
+
+	// assert
+	require.NoError(t, err)
+	assert.Empty(t, tracker.Snapshot())
+}
 
 func TestParseFacts_ClassifiesGeneralAndUntaggedFacts(t *testing.T) {
 	// arrange

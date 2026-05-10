@@ -15,6 +15,7 @@ import (
 
 	"github.com/rolfwessels/template-go-agent/internal/config"
 	"github.com/rolfwessels/template-go-agent/internal/memory"
+	"github.com/rolfwessels/template-go-agent/internal/usage"
 )
 
 type msgGenerator interface {
@@ -59,6 +60,19 @@ func WithMemoryDir(dir string) Option {
 	return func(a *Agent) { a.memoryDir = dir }
 }
 
+type trackerBinding struct {
+	tracker   usage.Tracker
+	userID    string
+	sessionID string
+	model     string
+}
+
+func WithUsageTracker(tracker usage.Tracker, userID, sessionID string) Option {
+	return func(a *Agent) {
+		a.trackerBinding = &trackerBinding{tracker: tracker, userID: userID, sessionID: sessionID}
+	}
+}
+
 type Agent struct {
 	react             msgGenerator
 	systemPrompt      string
@@ -68,6 +82,7 @@ type Agent struct {
 	history           []*schema.Message
 	resetCallback     func(ctx context.Context) error
 	schedulerBinding  *schedulerBinding
+	trackerBinding    *trackerBinding
 }
 
 func NewWithGenerator(gen Generator, systemPrompt string, opts ...Option) *Agent {
@@ -124,6 +139,9 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 		systemPrompt += "\n\n" + a.extraInstructions
 	}
 
+	if a.trackerBinding != nil {
+		a.trackerBinding.model = cfg.OpenAIModel
+	}
 	a.react = &reactMsgGenerator{agent: ra}
 	a.systemPrompt = systemPrompt
 	return a, nil
@@ -138,9 +156,27 @@ func (a *Agent) Generate(ctx context.Context, question string) (string, error) {
 		return "", fmt.Errorf("generating response: %w", err)
 	}
 
+	a.recordUsage(produced)
 	a.history = append(a.history, userMsg)
 	a.history = append(a.history, produced...)
 	return produced[len(produced)-1].Content, nil
+}
+
+func (a *Agent) recordUsage(msgs []*schema.Message) {
+	if a.trackerBinding == nil {
+		return
+	}
+	for _, msg := range msgs {
+		if msg.ResponseMeta == nil || msg.ResponseMeta.Usage == nil {
+			continue
+		}
+		u := msg.ResponseMeta.Usage
+		a.trackerBinding.tracker.Record(a.trackerBinding.userID, a.trackerBinding.sessionID, usage.ComponentAgent, a.trackerBinding.model, usage.TokenUsage{
+			PromptTokens:     u.PromptTokens,
+			CompletionTokens: u.CompletionTokens,
+			TotalTokens:      u.TotalTokens,
+		})
+	}
 }
 
 type reactMsgGenerator struct {

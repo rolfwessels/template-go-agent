@@ -17,6 +17,7 @@ import (
 	"github.com/rolfwessels/template-go-agent/internal/platform/cli"
 	"github.com/rolfwessels/template-go-agent/internal/platform/discord"
 	"github.com/rolfwessels/template-go-agent/internal/scheduler"
+	"github.com/rolfwessels/template-go-agent/internal/usage"
 )
 
 var version = "dev"
@@ -48,12 +49,16 @@ func run() error {
 	fileStore := memory.NewFileStore(".storage")
 	sessions := memory.NewSessionStore(".storage")
 
-	distiller, err := memory.NewLLMDistiller(ctx, cfg.OpenAIAPIKey, cfg.OpenAIModel)
+	counter := usage.NewCounter()
+	tracker := usage.NewFileTracker(".storage", counter)
+
+	distiller, err := memory.NewLLMDistiller(ctx, cfg.OpenAIAPIKey, cfg.OpenAIModel,
+		memory.WithDistillerTracker(tracker))
 	if err != nil {
 		return fmt.Errorf("creating distiller: %w", err)
 	}
 
-	sweeper := memory.NewSweeper(fileStore, distiller, sessions)
+	sweeper := memory.NewSweeper(fileStore, distiller, sessions, memory.WithSweeperTracker(tracker))
 
 	var platformInstructions string
 	if cfg.DiscordToken != "" {
@@ -66,11 +71,13 @@ func run() error {
 	)
 	pool = agent.NewPool(
 		func(ctx context.Context, userID, channelID string, history []*schema.Message) (*agent.Agent, error) {
+			sessionID := agent.SessionIDFromContext(ctx)
 			memCtx, _ := fileStore.AllAsContext(ctx, userID)
 			opts := []agent.Option{
 				agent.WithMemoryContext(memCtx),
 				agent.WithInitialHistory(history),
 				agent.WithMemoryDir(fileStore.MemoryDir(userID)),
+				agent.WithUsageTracker(tracker, userID, sessionID),
 				agent.WithResetCallback(func(ctx context.Context) error {
 					return pool.Reset(ctx, userID)
 				}),

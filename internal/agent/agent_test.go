@@ -9,6 +9,8 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/rolfwessels/template-go-agent/internal/usage/usagetest"
 )
 
 type fakeGenerator struct {
@@ -124,6 +126,59 @@ func TestLoadPrompts_MissingInstructions(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "instructions prompt")
+}
+
+func TestGenerate_WithUsageTracker_RecordsAgentComponent(t *testing.T) {
+	// arrange
+	tracker := &usagetest.StubTracker{}
+	gen := &fakeGenerator{msgs: []*schema.Message{{
+		Role:    schema.Assistant,
+		Content: "hello",
+		ResponseMeta: &schema.ResponseMeta{
+			Usage: &schema.TokenUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+		},
+	}}}
+	a := &Agent{
+		react:        gen,
+		systemPrompt: "sys",
+		trackerBinding: &trackerBinding{
+			tracker:   tracker,
+			userID:    "user1",
+			sessionID: "sess1",
+			model:     "gpt-test",
+		},
+	}
+
+	// act
+	_, err := a.Generate(context.Background(), "hello")
+
+	// assert
+	require.NoError(t, err)
+	components := tracker.Snapshot()
+	require.Len(t, components, 1)
+	assert.Equal(t, "agent", components[0])
+}
+
+func TestGenerate_WithUsageTracker_NoRecordWhenNoUsage(t *testing.T) {
+	// arrange
+	tracker := &usagetest.StubTracker{}
+	gen := newFakeGenerator("hello")
+	a := &Agent{
+		react:        gen,
+		systemPrompt: "sys",
+		trackerBinding: &trackerBinding{
+			tracker:   tracker,
+			userID:    "user1",
+			sessionID: "sess1",
+		},
+	}
+
+	// act
+	_, err := a.Generate(context.Background(), "hello")
+
+	// assert
+	require.NoError(t, err)
+	assert.Empty(t, tracker.Snapshot())
 }
 
 func TestLoadPrompts_ComposesBothFiles(t *testing.T) {

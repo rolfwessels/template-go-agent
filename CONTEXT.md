@@ -29,11 +29,11 @@ All per-user assets live under `.storage/user/{user_id}/`: `memory/` for Long-te
 _Avoid_: Flat per-asset directories at the storage root
 
 **Cost Ledger**:
-An append-only JSONL file at `.storage/user/{user_id}/metrics/costs.jsonl` that records one entry per LLM call completion. Each entry contains: `timestamp`, `component` (`agent` or `distiller`), `model`, `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost_usd`, and `session_id`. Written by the Usage Tracker on every LLM call via the Eino callback system.
+An append-only JSONL file at `.storage/user/{user_id}/metrics/costs.jsonl` that records one entry per LLM call completion. Each entry contains: `timestamp`, `component` (`agent` or `distiller`), `model`, `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost_usd`, and `session_id`. Written by the Usage Tracker after each LLM call by reading `ResponseMeta.Usage` on the returned message.
 _Avoid_: Usage log, token log, billing log
 
 **Usage Tracker**:
-The component (`internal/usage`) that intercepts LLM call completions via Eino callbacks, calculates cost using a hardcoded pricing table, writes entries to the Cost Ledger, logs to slog, and maintains process-lifetime atomic token and cost counters for the console status line. Injected into the Agent (via per-agent callback, closing over `userID`) and into the Memory Sweeper (via context-key, since the Sweeper knows `userID` at call time). Unknown model names are priced at $0 with a warning logged.
+The component (`internal/usage`) that records LLM call completions by reading `ResponseMeta.Usage` on returned messages, calculates cost using a hardcoded pricing table, writes entries to the Cost Ledger, logs to slog, and maintains process-lifetime atomic token and cost counters for the console status line. Injected into the Agent via `WithUsageTracker` (closing over `userID` and `sessionID`) and into the Memory Distiller via `WithDistillerTracker`; the Sweeper injects `userID`/`sessionID` into the context before calling the Distiller so cost entries are attributed correctly. Unknown model names are priced at $0 with a warning logged.
 _Avoid_: Token tracker, billing tracker, usage logger
 
 **Usage Record**:
