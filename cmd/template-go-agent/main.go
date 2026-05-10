@@ -101,17 +101,25 @@ func run() error {
 		}),
 	)
 
-	var adapter platform.MessagePlatform
+	var (
+		adapter      platform.MessagePlatform
+		statusWriter func()
+	)
 	if cfg.DiscordToken != "" {
 		slog.Info("discord token set — using Discord adapter")
 		adapter = discord.New(cfg.DiscordToken, discord.NewWhisperTranscriber(cfg.OpenAIAPIKey))
 	} else {
 		fmt.Printf("template-go-agent v%s — type your question and press Enter (Ctrl+C to quit)\n", version)
 		adapter = cli.New()
+		statusWriter = func() { fmt.Fprint(os.Stdout, "\r"+counter.StatusLine()) }
 	}
 	sched = scheduler.New(scheduler.NewStore(".storage"), pool, adapter)
+	if err := sched.Start(ctx); err != nil {
+		return fmt.Errorf("starting scheduler: %w", err)
+	}
+	defer sched.Stop()
 
-	result := runPlatform(ctx, pool, adapter, sched)
+	result := runPlatform(ctx, pool, adapter, statusWriter)
 	slog.Info("shutting down")
 	if err := pool.Shutdown(context.Background()); err != nil {
 		slog.Error("shutdown completed with errors", "err", err)
@@ -119,16 +127,15 @@ func run() error {
 	return result
 }
 
-func runPlatform(ctx context.Context, pool *agent.AgentPool, p platform.MessagePlatform, sched *scheduler.Scheduler) error {
+type Sender interface {
+	Send(ctx context.Context, userID, channelID, message string) (string, error)
+}
+
+func runPlatform(ctx context.Context, pool Sender, p platform.MessagePlatform, statusWriter func()) error {
 	if err := p.Connect(ctx); err != nil {
 		return fmt.Errorf("connecting platform: %w", err)
 	}
 	defer func() { _ = p.Disconnect(ctx) }()
-
-	if err := sched.Start(ctx); err != nil {
-		return fmt.Errorf("starting scheduler: %w", err)
-	}
-	defer sched.Stop()
 
 	msgs, err := p.ReceiveMessages(ctx)
 	if err != nil {
@@ -143,6 +150,10 @@ func runPlatform(ctx context.Context, pool *agent.AgentPool, p platform.MessageP
 		}
 		if err := p.SendMessage(ctx, msg.ChannelID, answer); err != nil {
 			fmt.Fprintf(os.Stderr, "error sending message: %v\n", err)
+			continue
+		}
+		if statusWriter != nil {
+			statusWriter()
 		}
 	}
 
