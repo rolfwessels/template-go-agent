@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan Refactor"
+  short_description: "Plan cleanup limited to a diff"
+  default_prompt: "Use $plan-refactor to assess an issue diff for focused refactoring."

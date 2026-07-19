@@ -1,0 +1,4 @@
+interface:
+  display_name: "TDD Implement"
+  short_description: "Implement an issue against its plan"
+  default_prompt: "Use $tdd-implement to implement a planned issue with TDD."

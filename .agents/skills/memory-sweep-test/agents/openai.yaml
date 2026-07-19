@@ -1,0 +1,4 @@
+interface:
+  display_name: "Memory Sweep Test"
+  short_description: "Exercise the real memory sweep"
+  default_prompt: "Use $memory-sweep-test to verify the memory sweep end to end."

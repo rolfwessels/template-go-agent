@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ship Issue"
+  short_description: "Test, commit, and deliver an issue"
+  default_prompt: "Use $ship-issue to finish, test, and ship an implemented issue."

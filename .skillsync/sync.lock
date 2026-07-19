@@ -2,9 +2,9 @@
   bundle = "rules/go-general"
   format = "claude"
   target = ".claude/rules/go-general.md"
-  hash = "da6e9658667a4eddb769d4fd54cd7f7f6c1677bba97adb0b708786e7c4e5d75d"
-  registry_hash = "3f6b43ff79ec30e0c7ac1575dda61628dc973fffadcd9fe8f6918d1697e46d57"
-  local_hash = "da6e9658667a4eddb769d4fd54cd7f7f6c1677bba97adb0b708786e7c4e5d75d"
+  hash = "f92dcd098ec9c558a4868db6d570fa12fc68c2fafe5427707e568ed40c19f09d"
+  registry_hash = "f92dcd098ec9c558a4868db6d570fa12fc68c2fafe5427707e568ed40c19f09d"
+  local_hash = "f92dcd098ec9c558a4868db6d570fa12fc68c2fafe5427707e568ed40c19f09d"
   state = "clean"
 
 [[entries]]
@@ -20,9 +20,9 @@
   bundle = "rules/go-testing"
   format = "claude"
   target = ".claude/rules/go-testing.md"
-  hash = "a07ced116bc9088cf485bd61c52b24e6000110c773f03367beeee13ec9239b8a"
-  registry_hash = "3c777f42dab3e9e32dc401194f4e0387de999b907fa39906db2a24419a512584"
-  local_hash = "a07ced116bc9088cf485bd61c52b24e6000110c773f03367beeee13ec9239b8a"
+  hash = "73878fecb5d2890195b0f241f7f352bff2336c6dc7b304c6b194e8759adaf6e3"
+  registry_hash = "73878fecb5d2890195b0f241f7f352bff2336c6dc7b304c6b194e8759adaf6e3"
+  local_hash = "73878fecb5d2890195b0f241f7f352bff2336c6dc7b304c6b194e8759adaf6e3"
   state = "clean"
 
 [[entries]]

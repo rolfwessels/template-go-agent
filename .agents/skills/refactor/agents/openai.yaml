@@ -1,0 +1,4 @@
+interface:
+  display_name: "Apply Refactor"
+  short_description: "Apply an approved refactor plan"
+  default_prompt: "Use $refactor to implement the refactor plan recorded in an issue."

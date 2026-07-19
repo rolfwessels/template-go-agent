@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pick Next Issue"
+  short_description: "Select and start the next issue"
+  default_prompt: "Use $pick-next-issue to find and start the next ready issue."

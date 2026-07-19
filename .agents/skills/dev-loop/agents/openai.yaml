@@ -1,0 +1,4 @@
+interface:
+  display_name: "Development Loop"
+  short_description: "Drive an issue from plan to ship"
+  default_prompt: "Use $dev-loop to drive the next ready issue through the workflow."

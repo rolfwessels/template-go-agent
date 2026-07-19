@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify Run"
+  short_description: "Run app acceptance criteria"
+  default_prompt: "Use $verify-run to build and exercise an issue acceptance criteria."

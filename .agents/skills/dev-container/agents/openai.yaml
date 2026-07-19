@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dev Container"
+  short_description: "Run Go tooling in the container"
+  default_prompt: "Use $dev-container to run a Go command in this project container."
