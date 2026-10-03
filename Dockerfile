@@ -30,7 +30,7 @@ RUN GOOS=linux GOARCH=amd64 go build \
     -o /out/template-go-agent ./cmd/template-go-agent
 
 # ── runtime: minimal production image ─────────────────────────────────────────
-FROM alpine:3.21 AS runtime
+FROM alpine:3.22 AS runtime
 
 RUN apk add --no-cache ca-certificates
 COPY --from=build /out/template-go-agent /usr/local/bin/template-go-agent
