@@ -102,6 +102,8 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 	model, err := einoopenai.NewChatModel(ctx, &einoopenai.ChatModelConfig{
 		APIKey: cfg.OpenAIAPIKey,
 		Model:  cfg.OpenAIModel,
+		// Newer reasoning models reject function tools on /v1/chat/completions unless effort is "none".
+		ReasoningEffort: einoopenai.ReasoningEffortLevel(cfg.OpenAIReasoningEffort),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating chat model: %w", err)

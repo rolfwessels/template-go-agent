@@ -11,6 +11,7 @@ import (
 type Config struct {
 	OpenAIAPIKey                  string
 	OpenAIModel                   string
+	OpenAIReasoningEffort         string
 	TavilyAPIKey                  string
 	DiscordToken                  string
 	SessionTimeoutMinutes         int
@@ -23,6 +24,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		OpenAIAPIKey:                  os.Getenv("OPENAI_API_KEY"),
 		OpenAIModel:                   envOrDefault("OPENAI_MODEL", "gpt-5.5"),
+		OpenAIReasoningEffort:         envOrDefault("OPENAI_REASONING_EFFORT", "none"),
 		TavilyAPIKey:                  os.Getenv("TAVILY_API_KEY"),
 		DiscordToken:                  os.Getenv("DISCORD_TOKEN"),
 		SessionTimeoutMinutes:         envIntOrDefault("SESSION_TIMEOUT_MINUTES", 30),

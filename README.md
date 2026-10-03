@@ -50,6 +50,7 @@ Copy `.env.example` to `.env` and fill in:
 |---|---|---|---|
 | `OPENAI_API_KEY` | ✅ | — | OpenAI API key |
 | `OPENAI_MODEL` | | `gpt-5.5` | Model to use |
+| `OPENAI_REASONING_EFFORT` | | `none` | Reasoning effort for the agent model (`none`, `low`, `medium`, `high`, `xhigh`) |
 | `TAVILY_API_KEY` | ✅ | — | Tavily search API key |
 | `SESSION_TIMEOUT_MINUTES` | | `30` | Inactivity timeout before agent eviction |
 | `CONVERSATION_HISTORY_WINDOW_SIZE` | | `20` | Messages reloaded from Session Log on agent recreation |
