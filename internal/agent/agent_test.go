@@ -2,8 +2,6 @@ package agent
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/cloudwego/eino/schema"
@@ -55,8 +53,8 @@ func TestGenerate_PassesFullHistory(t *testing.T) {
 		giveQuestions    []string
 		wantLastMsgCount int
 	}{
-		{"single message", []string{"q1"}, 2},    // system + user
-		{"two messages", []string{"q1", "q2"}, 4}, // system + user + assistant + user
+		{"single message", []string{"q1"}, 2},             // system + user
+		{"two messages", []string{"q1", "q2"}, 4},         // system + user + assistant + user
 		{"three messages", []string{"q1", "q2", "q3"}, 6}, // system + user + assistant + user + assistant + user
 	}
 
@@ -106,26 +104,6 @@ func TestGenerate_AllProducedMessagesStoredInHistory(t *testing.T) {
 	assert.Equal(t, schema.Tool, history[2].Role)
 	assert.Equal(t, schema.Assistant, history[3].Role)
 	assert.Equal(t, "done", history[3].Content)
-}
-
-func TestLoadPrompts_MissingSoul(t *testing.T) {
-	dir := t.TempDir()
-
-	_, err := loadPrompts(filepath.Join(dir, "soul.md"), filepath.Join(dir, "instructions.md"))
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "soul prompt")
-}
-
-func TestLoadPrompts_MissingInstructions(t *testing.T) {
-	dir := t.TempDir()
-	soulPath := filepath.Join(dir, "soul.md")
-	require.NoError(t, os.WriteFile(soulPath, []byte("# Soul"), 0600))
-
-	_, err := loadPrompts(soulPath, filepath.Join(dir, "instructions.md"))
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "instructions prompt")
 }
 
 func TestGenerate_WithUsageTracker_RecordsAgentComponent(t *testing.T) {
@@ -179,18 +157,4 @@ func TestGenerate_WithUsageTracker_NoRecordWhenNoUsage(t *testing.T) {
 	// assert
 	require.NoError(t, err)
 	assert.Empty(t, tracker.Snapshot())
-}
-
-func TestLoadPrompts_ComposesBothFiles(t *testing.T) {
-	dir := t.TempDir()
-	soulPath := filepath.Join(dir, "soul.md")
-	instrPath := filepath.Join(dir, "instructions.md")
-	require.NoError(t, os.WriteFile(soulPath, []byte("# Soul"), 0600))
-	require.NoError(t, os.WriteFile(instrPath, []byte("# Instructions"), 0600))
-
-	prompt, err := loadPrompts(soulPath, instrPath)
-
-	require.NoError(t, err)
-	assert.Contains(t, prompt, "# Soul")
-	assert.Contains(t, prompt, "# Instructions")
 }

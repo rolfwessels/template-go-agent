@@ -33,6 +33,7 @@ RUN GOOS=linux GOARCH=amd64 go build \
 FROM alpine:3.22 AS runtime
 
 RUN apk add --no-cache ca-certificates
+# Default prompts are embedded in the binary; no runtime prompts directory is needed.
 COPY --from=build /out/template-go-agent /usr/local/bin/template-go-agent
 ENTRYPOINT ["template-go-agent"]
 

@@ -14,6 +14,7 @@ type Config struct {
 	OpenAIReasoningEffort         string
 	TavilyAPIKey                  string
 	DiscordToken                  string
+	PromptsDir                    string
 	SessionTimeoutMinutes         int
 	ConversationHistoryWindowSize int
 }
@@ -27,6 +28,7 @@ func Load() (*Config, error) {
 		OpenAIReasoningEffort:         envOrDefault("OPENAI_REASONING_EFFORT", "none"),
 		TavilyAPIKey:                  os.Getenv("TAVILY_API_KEY"),
 		DiscordToken:                  os.Getenv("DISCORD_TOKEN"),
+		PromptsDir:                    os.Getenv("PROMPTS_DIR"),
 		SessionTimeoutMinutes:         envIntOrDefault("SESSION_TIMEOUT_MINUTES", 30),
 		ConversationHistoryWindowSize: envIntOrDefault("CONVERSATION_HISTORY_WINDOW_SIZE", 20),
 	}

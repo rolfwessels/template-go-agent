@@ -120,6 +120,7 @@ test: vet
 
 PLATFORMS := linux-amd64 linux-arm64 windows-amd64 darwin-amd64 darwin-arm64
 
+# Default prompts are embedded in each binary, so archives contain only the binary.
 publish:
 	@echo -e "Building ${GREEN}v$(version-full)${NC} release of $(project)"
 	@rm -rf ./dist

@@ -7,7 +7,9 @@ A Go template for hybrid AI agents — conversational at the surface, with auton
 
 ## ✨ How it works
 
-The agent receives a message from a platform adapter (CLI or Discord), runs a ReAct reasoning loop (calling tools as needed), and sends back a grounded answer. Its persona and instructions are loaded from `prompts/soul.md` and `prompts/instructions.md` at startup — edit those files to customise the agent's identity and behaviour.
+The agent receives a message from a platform adapter (CLI or Discord), runs a ReAct reasoning loop (calling tools as needed), and sends back a grounded answer. Its persona and instructions come from `prompts/soul.md` and `prompts/instructions.md`, embedded into the binary at build time. Edit those files and rebuild to customise the defaults, or set `PROMPTS_DIR` to a directory containing edited copies of both files for runtime overrides.
+
+Empty/unset `PROMPTS_DIR`, or an override directory with neither file present, uses the embedded defaults. Providing only one file, or a file that cannot be read, causes agent construction to fail. Use an absolute path for overrides to avoid depending on the working directory; relative override paths resolve from the working directory. Docker runtime images and release archives need only the binary and work without a `prompts/` folder.
 
 Built-in tools: `web_search`, `http_fetch`, `get_current_time`, `date_math`, `calculate`, `new_session`, `schedule_reminder`, `list_reminders`, `cancel_reminder`, `read_memory_file`, `search_memory`.
 
@@ -52,6 +54,7 @@ Copy `.env.example` to `.env` and fill in:
 | `OPENAI_MODEL` | | `gpt-5.5` | Model to use |
 | `OPENAI_REASONING_EFFORT` | | `none` | Reasoning effort for the agent model (`none`, `low`, `medium`, `high`, `xhigh`) |
 | `TAVILY_API_KEY` | ✅ | — | Tavily search API key |
+| `PROMPTS_DIR` | | — | Optional directory containing both `soul.md` and `instructions.md`; empty/unset or neither file present uses embedded defaults |
 | `SESSION_TIMEOUT_MINUTES` | | `30` | Inactivity timeout before agent eviction |
 | `CONVERSATION_HISTORY_WINDOW_SIZE` | | `20` | Messages reloaded from Session Log on agent recreation |
 | `DISCORD_TOKEN` | | — | Discord bot token. If set, Discord adapter is used instead of CLI |

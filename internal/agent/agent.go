@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	einoopenai "github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/tool"
@@ -16,6 +17,7 @@ import (
 	"github.com/rolfwessels/template-go-agent/internal/config"
 	"github.com/rolfwessels/template-go-agent/internal/memory"
 	"github.com/rolfwessels/template-go-agent/internal/usage"
+	"github.com/rolfwessels/template-go-agent/prompts"
 )
 
 type msgGenerator interface {
@@ -99,6 +101,11 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 		opt(a)
 	}
 
+	systemPrompt, err := loadPrompts(cfg.PromptsDir)
+	if err != nil {
+		return nil, err
+	}
+
 	model, err := einoopenai.NewChatModel(ctx, &einoopenai.ChatModelConfig{
 		APIKey: cfg.OpenAIAPIKey,
 		Model:  cfg.OpenAIModel,
@@ -132,10 +139,6 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 		return nil, fmt.Errorf("creating react agent: %w", err)
 	}
 
-	systemPrompt, err := loadPrompts("prompts/soul.md", "prompts/instructions.md")
-	if err != nil {
-		return nil, err
-	}
 	systemPrompt += "\n\n" + memory.Instructions()
 	if a.extraInstructions != "" {
 		systemPrompt += "\n\n" + a.extraInstructions
@@ -229,14 +232,21 @@ func buildMessages(systemPrompt, memoryContext string, history []*schema.Message
 	return msgs
 }
 
-func loadPrompts(soulPath, instructionsPath string) (string, error) {
-	soul, err := os.ReadFile(soulPath)
-	if err != nil {
-		return "", fmt.Errorf("loading soul prompt: %w", err)
+func loadPrompts(dir string) (string, error) {
+	if dir == "" {
+		return prompts.Defaults(), nil
 	}
-	instructions, err := os.ReadFile(instructionsPath)
-	if err != nil {
-		return "", fmt.Errorf("loading instructions prompt: %w", err)
+
+	soul, soulErr := os.ReadFile(filepath.Join(dir, "soul.md"))
+	instructions, instructionsErr := os.ReadFile(filepath.Join(dir, "instructions.md"))
+	if os.IsNotExist(soulErr) && os.IsNotExist(instructionsErr) {
+		return prompts.Defaults(), nil
+	}
+	if soulErr != nil {
+		return "", fmt.Errorf("loading soul prompt from PROMPTS_DIR %q (both soul.md and instructions.md are required): %w", dir, soulErr)
+	}
+	if instructionsErr != nil {
+		return "", fmt.Errorf("loading instructions prompt from PROMPTS_DIR %q (both soul.md and instructions.md are required): %w", dir, instructionsErr)
 	}
 	return string(soul) + "\n\n" + string(instructions), nil
 }
