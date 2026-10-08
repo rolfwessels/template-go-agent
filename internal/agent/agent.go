@@ -74,6 +74,7 @@ func WithUsageTracker(tracker usage.Tracker, userID, sessionID string) Option {
 }
 
 type Agent struct {
+	turn              turnLock
 	react             msgGenerator
 	systemPrompt      string
 	memoryContext     string
@@ -150,6 +151,11 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 }
 
 func (a *Agent) Generate(ctx context.Context, question string) (string, error) {
+	if err := a.turn.lock(ctx, nil); err != nil {
+		return "", err
+	}
+	defer a.turn.unlock()
+
 	userMsg := schema.UserMessage(question)
 	msgs := buildMessages(a.systemPrompt, a.memoryContext, a.history, userMsg)
 
