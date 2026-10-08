@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
 
 type FileStore struct {
 	dir string
+	mu  sync.Mutex // serialize read-modify-write operations within this store
 }
 
 func NewFileStore(dir string) *FileStore {
@@ -18,6 +20,9 @@ func NewFileStore(dir string) *FileStore {
 }
 
 func (s *FileStore) Save(_ context.Context, userID, date string, fact Fact) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	memDir := s.MemoryDir(userID)
 	if err := os.MkdirAll(memDir, 0750); err != nil {
 		return fmt.Errorf("creating memory dir: %w", err)
@@ -26,13 +31,14 @@ func (s *FileStore) Save(_ context.Context, userID, date string, fact Fact) erro
 	if err := os.MkdirAll(dailyDir, 0750); err != nil {
 		return fmt.Errorf("creating daily dir: %w", err)
 	}
-	if err := s.appendFact(filepath.Join(dailyDir, date+".md"), fact.Content); err != nil {
-		return err
-	}
+	// Persist the general copy first. Otherwise a failed general write leaves a
+	// daily copy that tells the distiller to omit the fact on the next sweep.
 	if fact.Kind == KindGeneral {
-		return s.appendFact(filepath.Join(memDir, "general.md"), fact.Content)
+		if err := s.appendFact(filepath.Join(memDir, "general.md"), fact.Content); err != nil {
+			return err
+		}
 	}
-	return nil
+	return s.appendFact(filepath.Join(dailyDir, date+".md"), fact.Content)
 }
 
 func (s *FileStore) ReadDailyFile(userID, date string) (string, error) {
@@ -48,20 +54,23 @@ func (s *FileStore) ReadDailyFile(userID, date string) (string, error) {
 }
 
 func (s *FileStore) appendFact(path, content string) error {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
 		name := strings.TrimSuffix(filepath.Base(path), ".md")
-		header := fmt.Sprintf("# %s\n\n", name)
-		if err := os.WriteFile(path, []byte(header), 0600); err != nil {
-			return fmt.Errorf("creating file: %w", err)
-		}
+		data = []byte(fmt.Sprintf("# %s\n\n", name))
+	} else if err != nil {
+		return fmt.Errorf("reading fact file: %w", err)
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0600)
-	if err != nil {
-		return fmt.Errorf("opening file: %w", err)
+	// Identity is trimmed content within each destination file. Compare complete
+	// bullet records, including their delimiters, rather than substrings of facts.
+	record := "- " + strings.TrimSpace(content) + "\n"
+	if strings.Contains("\n"+string(data), "\n"+record) {
+		return nil
 	}
-	defer f.Close()
-	_, err = fmt.Fprintf(f, "- %s\n", strings.TrimSpace(content))
-	return err
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		data = append(data, '\n')
+	}
+	return writeFileAtomic(path, append(data, record...))
 }
 
 // UpdateIndex rebuilds MEMORY.md with clickable Markdown links.
@@ -69,11 +78,17 @@ func (s *FileStore) appendFact(path, content string) error {
 // (e.g. "daily/2026-04-18.md"). Existing descriptions in MEMORY.md are preserved
 // for any file not present in summaries.
 func (s *FileStore) UpdateIndex(userID string, summaries map[string]string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	memDir := s.MemoryDir(userID)
 	if err := os.MkdirAll(memDir, 0750); err != nil {
 		return fmt.Errorf("creating memory dir: %w", err)
 	}
-	merged := s.parseIndexSummaries(filepath.Join(memDir, "MEMORY.md"))
+	merged, err := s.parseIndexSummaries(filepath.Join(memDir, "MEMORY.md"))
+	if err != nil {
+		return err
+	}
 	for k, v := range summaries {
 		merged[k] = v
 	}
@@ -86,6 +101,8 @@ func (s *FileStore) UpdateIndex(userID string, summaries map[string]string) erro
 			desc = "stable facts and preferences"
 		}
 		sb.WriteString(fmt.Sprintf("- [general.md](general.md)"+indexSep+"%s\n", desc))
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("checking general memory: %w", err)
 	}
 
 	dailyDir := filepath.Join(memDir, "daily")
@@ -106,18 +123,23 @@ func (s *FileStore) UpdateIndex(userID string, summaries map[string]string) erro
 			}
 			sb.WriteString(fmt.Sprintf("- [%s](%s)"+indexSep+"%s\n", rel, rel, desc))
 		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("listing daily memory: %w", err)
 	}
 
-	return os.WriteFile(filepath.Join(memDir, "MEMORY.md"), []byte(sb.String()), 0600)
+	return writeFileAtomic(filepath.Join(memDir, "MEMORY.md"), []byte(sb.String()))
 }
 
 const indexSep = " — "
 
-func (s *FileStore) parseIndexSummaries(path string) map[string]string {
+func (s *FileStore) parseIndexSummaries(path string) (map[string]string, error) {
 	result := map[string]string{}
 	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return result, nil
+	}
 	if err != nil {
-		return result
+		return nil, fmt.Errorf("reading memory index: %w", err)
 	}
 	for _, line := range strings.Split(string(data), "\n") {
 		if !strings.HasPrefix(line, "- [") {
@@ -136,7 +158,7 @@ func (s *FileStore) parseIndexSummaries(path string) map[string]string {
 			result[rel] = desc
 		}
 	}
-	return result
+	return result, nil
 }
 
 func (s *FileStore) AllAsContext(_ context.Context, userID string) (string, error) {

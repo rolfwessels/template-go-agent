@@ -121,6 +121,7 @@ func (s *SessionStore) cursorPath(userID, sessionID string) string {
 	return filepath.Join(s.sessDir(userID), sessionID+".swept_until")
 }
 
+// ReadCursor returns the number of physical JSONL lines committed by a sweep.
 func (s *SessionStore) ReadCursor(userID, sessionID string) (int, error) {
 	data, err := os.ReadFile(s.cursorPath(userID, sessionID))
 	if os.IsNotExist(err) {
@@ -137,7 +138,7 @@ func (s *SessionStore) ReadCursor(userID, sessionID string) (int, error) {
 }
 
 func (s *SessionStore) WriteCursor(userID, sessionID string, n int) error {
-	if err := os.WriteFile(s.cursorPath(userID, sessionID), []byte(strconv.Itoa(n)+"\n"), 0600); err != nil {
+	if err := writeFileAtomic(s.cursorPath(userID, sessionID), []byte(strconv.Itoa(n)+"\n")); err != nil {
 		return fmt.Errorf("writing cursor: %w", err)
 	}
 	return nil

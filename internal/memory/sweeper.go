@@ -11,8 +11,16 @@ import (
 	"github.com/rolfwessels/template-go-agent/internal/usage"
 )
 
+// sweepStore is the persistence needed to commit a sweep. Save and UpdateIndex
+// must be idempotent so an uncommitted message range can safely be retried.
+type sweepStore interface {
+	ReadDailyFile(userID, date string) (string, error)
+	Save(ctx context.Context, userID, date string, fact Fact) error
+	UpdateIndex(userID string, summaries map[string]string) error
+}
+
 type Sweeper struct {
-	store     *FileStore
+	store     sweepStore
 	distiller Distiller
 	sessions  *SessionStore
 	tracker   usage.Tracker
@@ -24,7 +32,7 @@ func WithSweeperTracker(tracker usage.Tracker) SweeperOption {
 	return func(s *Sweeper) { s.tracker = tracker }
 }
 
-func NewSweeper(store *FileStore, distiller Distiller, sessions *SessionStore, opts ...SweeperOption) *Sweeper {
+func NewSweeper(store sweepStore, distiller Distiller, sessions *SessionStore, opts ...SweeperOption) *Sweeper {
 	s := &Sweeper{store: store, distiller: distiller, sessions: sessions}
 	for _, opt := range opts {
 		opt(s)
@@ -32,6 +40,9 @@ func NewSweeper(store *FileStore, distiller Distiller, sessions *SessionStore, o
 	return s
 }
 
+// OnEvict processes session lines (cursor, total], grouped by date. The cursor
+// counts physical JSONL lines and is committed only after all facts and the index
+// have been persisted; any error leaves the entire range available for retry.
 func (s *Sweeper) OnEvict(ctx context.Context, userID, sessionID string) error {
 	if s.tracker != nil {
 		ctx = usage.WithContext(ctx, userID, sessionID)
@@ -60,31 +71,31 @@ func (s *Sweeper) OnEvict(ctx context.Context, userID, sessionID string) error {
 	for _, date := range dates {
 		existing, err := s.store.ReadDailyFile(userID, date)
 		if err != nil {
-			slog.Warn("memory read daily file failed", "userID", userID, "date", date, "err", err)
+			return fmt.Errorf("reading daily memory for %s: %w", date, err)
 		}
 		facts, summary, err := s.distiller.DistillAndSummarize(ctx, existing, byDate[date])
 		if err != nil {
-			slog.Warn("memory distill failed", "userID", userID, "date", date, "err", err)
-			continue
+			return fmt.Errorf("distilling memory for %s: %w", date, err)
 		}
 		for _, fact := range facts {
 			if err := s.store.Save(ctx, userID, date, fact); err != nil {
-				slog.Warn("memory fact store failed", "userID", userID, "err", err)
-				continue
+				return fmt.Errorf("storing memory fact for %s: %w", date, err)
 			}
-			slog.Info("memory fact stored", "userID", userID, "kind", fact.Kind, "date", date, "fact", fact.Content)
+			slog.Info("memory fact stored", "userID", userID, "kind", fact.Kind, "date", date)
 		}
 		totalFacts += len(facts)
 		if summary != "" {
 			summaries["daily/"+date+".md"] = summary
 		}
 	}
-	slog.Info("memory sweep complete", "userID", userID, "facts", totalFacts)
-
 	if err := s.store.UpdateIndex(userID, summaries); err != nil {
-		slog.Warn("memory index update failed", "userID", userID, "err", err)
+		return fmt.Errorf("updating memory index: %w", err)
 	}
-	return s.sessions.WriteCursor(userID, sessionID, total)
+	if err := s.sessions.WriteCursor(userID, sessionID, total); err != nil {
+		return fmt.Errorf("committing sweep cursor: %w", err)
+	}
+	slog.Info("memory sweep complete", "userID", userID, "facts", totalFacts)
+	return nil
 }
 
 func sortedKeys(m map[string][]*schema.Message) []string {

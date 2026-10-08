@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,10 +17,15 @@ import (
 type stubDistiller struct {
 	facts   []Fact
 	summary string
+	err     error
+	calls   int
+	msgs    []*schema.Message
 }
 
-func (s *stubDistiller) DistillAndSummarize(_ context.Context, _ string, _ []*schema.Message) ([]Fact, string, error) {
-	return s.facts, s.summary, nil
+func (s *stubDistiller) DistillAndSummarize(_ context.Context, _ string, msgs []*schema.Message) ([]Fact, string, error) {
+	s.calls++
+	s.msgs = msgs
+	return s.facts, s.summary, s.err
 }
 
 type countingDistiller struct {
@@ -234,4 +240,192 @@ func TestSweeper_NoOpWhenCursorAtEOF(t *testing.T) {
 	data, _ := os.ReadFile(filepath.Join(storeDir, "user", "grace", "memory", "general.md"))
 	count := strings.Count(string(data), "only once")
 	assert.Equal(t, 1, count)
+}
+
+// failingSweepStore injects failures while using real file persistence, so retry
+// assertions exercise FileStore's deduplication and index rebuilding.
+type failingSweepStore struct {
+	*FileStore
+	readErr         error
+	saveErr         error
+	failSaveAt      int
+	saveCalls       int
+	indexErr        error
+	indexCalls      int
+	indexWriteFirst bool
+}
+
+func (s *failingSweepStore) ReadDailyFile(userID, date string) (string, error) {
+	if s.readErr != nil {
+		return "", s.readErr
+	}
+	return s.FileStore.ReadDailyFile(userID, date)
+}
+
+func (s *failingSweepStore) Save(ctx context.Context, userID, date string, fact Fact) error {
+	s.saveCalls++
+	if s.saveCalls == s.failSaveAt {
+		return s.saveErr
+	}
+	return s.FileStore.Save(ctx, userID, date, fact)
+}
+
+func (s *failingSweepStore) UpdateIndex(userID string, summaries map[string]string) error {
+	s.indexCalls++
+	if s.indexWriteFirst || s.indexErr == nil {
+		if err := s.FileStore.UpdateIndex(userID, summaries); err != nil {
+			return err
+		}
+	}
+	return s.indexErr
+}
+
+func writeSweepHistory(t *testing.T, sessions *SessionStore) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(sessions.sessDir("alice"), 0750))
+	// The cursor already covers the first line. Only lines (1, 3] are swept.
+	data := `{"timestamp":"2026-04-17T08:00:00Z","role":"user","content":"already swept"}
+{"timestamp":"2026-04-18T08:00:00Z","role":"user","content":"new message"}
+{"timestamp":"2026-04-18T09:00:00Z","role":"assistant","content":"new reply"}
+`
+	require.NoError(t, os.WriteFile(sessions.sessionPath("alice", "sess-1"), []byte(data), 0600))
+	require.NoError(t, sessions.WriteCursor("alice", "sess-1", 1))
+}
+
+func requireSweepCursor(t *testing.T, sessions *SessionStore, want int) {
+	t.Helper()
+	cursor, err := sessions.ReadCursor("alice", "sess-1")
+	require.NoError(t, err)
+	require.Equal(t, want, cursor)
+}
+
+func TestSweeper_FailuresLeaveCursorAndRetryWithoutDuplicates(t *testing.T) {
+	for _, failure := range []string{"daily read", "distiller", "second fact", "index before write", "index after write"} {
+		t.Run(failure, func(t *testing.T) {
+			_, files, sessions := newSweeperFixture(t)
+			writeSweepHistory(t, sessions)
+			store := &failingSweepStore{FileStore: files}
+			distiller := &stubDistiller{
+				facts: []Fact{
+					{Content: "general fact", Kind: KindGeneral},
+					{Content: "daily fact", Kind: KindDaily},
+				},
+				summary: "A summary.",
+			}
+			injected := errors.New("injected failure")
+			switch failure {
+			case "daily read":
+				store.readErr = injected
+			case "distiller":
+				distiller.err = injected
+			case "second fact":
+				store.failSaveAt, store.saveErr = 2, injected
+			case "index before write", "index after write":
+				store.indexErr = injected
+				store.indexWriteFirst = failure == "index after write"
+			}
+			sweeper := NewSweeper(store, distiller, sessions)
+
+			err := sweeper.OnEvict(context.Background(), "alice", "sess-1")
+			require.ErrorIs(t, err, injected)
+			requireSweepCursor(t, sessions, 1)
+			if failure == "daily read" || failure == "distiller" {
+				assert.Zero(t, store.saveCalls)
+			}
+			if failure == "second fact" {
+				daily, err := files.ReadDailyFile("alice", "2026-04-18")
+				require.NoError(t, err)
+				assert.Contains(t, daily, "- general fact\n")
+				assert.NotContains(t, daily, "- daily fact\n")
+			}
+			if !strings.HasPrefix(failure, "index") {
+				assert.Zero(t, store.indexCalls)
+			}
+
+			store.readErr, store.saveErr, store.indexErr, distiller.err = nil, nil, nil, nil
+			store.failSaveAt = 0
+			// A fresh sweeper and FileStore prove retry identity is persisted on
+			// disk rather than relying on an in-memory record of successful facts.
+			store.FileStore = NewFileStore(files.dir)
+			sweeper = NewSweeper(store, distiller, sessions)
+			require.NoError(t, sweeper.OnEvict(context.Background(), "alice", "sess-1"))
+			requireSweepCursor(t, sessions, 3)
+			require.Len(t, distiller.msgs, 2)
+			assert.Equal(t, "new message", distiller.msgs[0].Content)
+			assert.Equal(t, "new reply", distiller.msgs[1].Content)
+
+			daily, err := files.ReadDailyFile("alice", "2026-04-18")
+			require.NoError(t, err)
+			assert.Equal(t, 1, strings.Count(daily, "- general fact\n"))
+			assert.Equal(t, 1, strings.Count(daily, "- daily fact\n"))
+			general, err := os.ReadFile(filepath.Join(files.MemoryDir("alice"), "general.md"))
+			require.NoError(t, err)
+			assert.Equal(t, 1, strings.Count(string(general), "- general fact\n"))
+			index, err := os.ReadFile(filepath.Join(files.MemoryDir("alice"), "MEMORY.md"))
+			require.NoError(t, err)
+			assert.Equal(t, 1, strings.Count(string(index), "- [general.md](general.md)"))
+			assert.Equal(t, 1, strings.Count(string(index), "- [daily/2026-04-18.md](daily/2026-04-18.md)"))
+			assert.Contains(t, string(index), "A summary.")
+
+			calls := distiller.calls
+			require.NoError(t, sweeper.OnEvict(context.Background(), "alice", "sess-1"))
+			assert.Equal(t, calls, distiller.calls, "committed messages must not be redistilled")
+		})
+	}
+}
+
+type distillerFunc func(context.Context, string, []*schema.Message) ([]Fact, string, error)
+
+func (f distillerFunc) DistillAndSummarize(ctx context.Context, existing string, msgs []*schema.Message) ([]Fact, string, error) {
+	return f(ctx, existing, msgs)
+}
+
+func TestSweeper_LaterDateFailureRetriesEntireRange(t *testing.T) {
+	_, store, sessions := newSweeperFixture(t)
+	writeSweepHistory(t, sessions)
+	f, err := os.OpenFile(sessions.sessionPath("alice", "sess-1"), os.O_APPEND|os.O_WRONLY, 0600)
+	require.NoError(t, err)
+	_, err = f.WriteString(`{"timestamp":"2026-04-19T08:00:00Z","role":"user","content":"later date"}` + "\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	injected := errors.New("later date distillation failed")
+	fail := true
+	var received []string
+	distiller := distillerFunc(func(_ context.Context, _ string, msgs []*schema.Message) ([]Fact, string, error) {
+		received = append(received, msgs[0].Content)
+		if fail && msgs[0].Content == "later date" {
+			return nil, "", injected
+		}
+		return []Fact{{Content: msgs[0].Content, Kind: KindDaily}}, "", nil
+	})
+	sweeper := NewSweeper(store, distiller, sessions)
+	require.ErrorIs(t, sweeper.OnEvict(context.Background(), "alice", "sess-1"), injected)
+	requireSweepCursor(t, sessions, 1)
+	fail = false
+	require.NoError(t, sweeper.OnEvict(context.Background(), "alice", "sess-1"))
+	requireSweepCursor(t, sessions, 4)
+	assert.Equal(t, []string{"new message", "later date", "new message", "later date"}, received)
+	for _, date := range []string{"2026-04-18", "2026-04-19"} {
+		daily, err := store.ReadDailyFile("alice", date)
+		require.NoError(t, err)
+		assert.Equal(t, 1, strings.Count(daily, "\n- "))
+	}
+}
+
+func TestSweeper_CommitsOnlyReadRange(t *testing.T) {
+	_, store, sessions := newSweeperFixture(t)
+	writeSweepHistory(t, sessions)
+	distiller := distillerFunc(func(_ context.Context, _ string, _ []*schema.Message) ([]Fact, string, error) {
+		// New messages arriving during distillation belong to the next batch.
+		require.NoError(t, sessions.Append("alice", "sess-1", "user", "arrived during sweep"))
+		return nil, "", nil
+	})
+	sweeper := NewSweeper(store, distiller, sessions)
+	require.NoError(t, sweeper.OnEvict(context.Background(), "alice", "sess-1"))
+	requireSweepCursor(t, sessions, 3)
+	msgs, total, err := sessions.ReadFrom("alice", "sess-1", 3)
+	require.NoError(t, err)
+	assert.Equal(t, 4, total)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "arrived during sweep", msgs[0].Content)
 }
