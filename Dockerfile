@@ -1,5 +1,5 @@
 # ── base: shared Go toolchain ─────────────────────────────────────────────────
-FROM golang:1.26-alpine AS base
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS base
 
 RUN apk update \
   && apk upgrade \
@@ -19,13 +19,15 @@ RUN apk update \
 FROM base AS build
 
 ARG VERSION=dev
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /template-go-agent
 
 COPY go.mod ./
 RUN go mod download
 
 COPY . .
-RUN GOOS=linux GOARCH=amd64 go build \
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
     -ldflags="-s -w -X 'main.version=${VERSION}'" \
     -o /out/template-go-agent ./cmd/template-go-agent
 

@@ -206,6 +206,16 @@ make version
 Feature branches are created off `main` with the prefix `feature/` or `bug/`.
 PR builds attach archives as workflow artifacts. Merging to `main` publishes them as a new versioned [GitHub release](https://github.com/rolfwessels/template-go-agent/releases).
 
+### Docker publishing
+
+After tests pass, every push to `main` in `rolfwessels/template-go-agent` also publishes the Docker runtime image for `linux/amd64` and `linux/arm64` to Docker Hub as `rolfwessels/template-go-agent` with these tags:
+
+- `alpha` and `latest`: updated on each push.
+- `v<version>`: the release version from `make -s print-version` (`0.1.<commit-count>`, using the full Git history).
+- `<short-sha>`: the commit's short SHA from `git rev-parse --short=8 HEAD`.
+
+Configure repository Actions secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (a Docker Hub access token with permission to push to this image repository). Docker publishing does not run on pull requests or forks.
+
 ## 📝 To Do
 
 ### Gaps worth addressing
