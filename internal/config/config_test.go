@@ -1,11 +1,40 @@
 package config
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestLoad_promptsDir(t *testing.T) {
+	// Keep dotenv files out of the unset-environment case.
+	t.Chdir(t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "test-openai")
+	t.Setenv("TAVILY_API_KEY", "test-tavily")
+	for _, tt := range []struct {
+		name  string
+		value string
+		unset bool
+	}{
+		{name: "unset", unset: true},
+		{name: "empty"},
+		{name: "custom directory", value: "/custom prompt templates"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("PROMPTS_DIR", tt.value)
+			if tt.unset {
+				require.NoError(t, os.Unsetenv("PROMPTS_DIR"))
+			}
+
+			cfg, err := Load()
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.value, cfg.PromptsDir)
+		})
+	}
+}
 
 func TestLoad_missingOpenAIKey(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
