@@ -204,3 +204,70 @@ func TestFileStore_GeneralFileHasHeader(t *testing.T) {
 	data, _ := os.ReadFile(filepath.Join(dir, "user", "carol", "memory", "general.md"))
 	assert.True(t, strings.HasPrefix(string(data), "# general\n"))
 }
+
+func TestFileStore_SaveDeduplicatesTrimmedContentPerFile(t *testing.T) {
+	store := NewFileStore(t.TempDir())
+	ctx := context.Background()
+	for _, date := range []string{"2026-04-18", "2026-04-19"} {
+		for _, content := range []string{"fact", "  fact\n", "fact with more detail", "fact"} {
+			require.NoError(t, store.Save(ctx, "alice", date, Fact{Content: content, Kind: KindGeneral}))
+		}
+		daily, err := store.ReadDailyFile("alice", date)
+		require.NoError(t, err)
+		assert.Equal(t, 1, strings.Count(daily, "- fact\n"))
+		assert.Equal(t, 1, strings.Count(daily, "- fact with more detail\n"))
+	}
+	general, err := os.ReadFile(filepath.Join(store.MemoryDir("alice"), "general.md"))
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(string(general), "- fact\n"))
+	assert.Equal(t, 1, strings.Count(string(general), "- fact with more detail\n"))
+}
+
+func TestFileStore_SaveGeneralRetriesPartialLayeredWrite(t *testing.T) {
+	for _, blockedFile := range []string{"general.md", "daily/2026-04-18.md"} {
+		t.Run(blockedFile, func(t *testing.T) {
+			store := NewFileStore(t.TempDir())
+			memDir := store.MemoryDir("alice")
+			blockedPath := filepath.Join(memDir, blockedFile)
+			// A directory at the destination reliably fails writes without
+			// permission assumptions, including when tests run as root.
+			require.NoError(t, os.MkdirAll(blockedPath, 0750))
+			fact := Fact{Content: "general fact", Kind: KindGeneral}
+			require.Error(t, store.Save(context.Background(), "alice", "2026-04-18", fact))
+			if blockedFile == "general.md" {
+				daily, err := store.ReadDailyFile("alice", "2026-04-18")
+				require.NoError(t, err)
+				assert.Empty(t, daily, "a general failure must not expose a daily copy to the distiller")
+			} else {
+				general, err := os.ReadFile(filepath.Join(memDir, "general.md"))
+				require.NoError(t, err)
+				assert.Contains(t, string(general), "- general fact\n")
+			}
+			require.NoError(t, os.Remove(blockedPath))
+
+			store = NewFileStore(store.dir)
+			require.NoError(t, store.Save(context.Background(), "alice", "2026-04-18", fact))
+			for _, rel := range []string{"general.md", "daily/2026-04-18.md"} {
+				data, err := os.ReadFile(filepath.Join(memDir, rel))
+				require.NoError(t, err)
+				assert.Equal(t, 1, strings.Count(string(data), "- general fact\n"))
+			}
+		})
+	}
+}
+
+func TestFileStore_UpdateIndexReturnsReadFailures(t *testing.T) {
+	for _, blockedFile := range []string{"MEMORY.md", "daily"} {
+		t.Run(blockedFile, func(t *testing.T) {
+			store := NewFileStore(t.TempDir())
+			memDir := store.MemoryDir("alice")
+			require.NoError(t, os.MkdirAll(memDir, 0750))
+			if blockedFile == "MEMORY.md" {
+				require.NoError(t, os.Mkdir(filepath.Join(memDir, blockedFile), 0750))
+			} else {
+				require.NoError(t, os.WriteFile(filepath.Join(memDir, blockedFile), []byte("not a directory"), 0600))
+			}
+			require.Error(t, store.UpdateIndex("alice", nil))
+		})
+	}
+}
