@@ -1,131 +1,68 @@
 # Go Agent Template
 
-A reusable Go template for building hybrid AI agents — conversational at the surface, with autonomous multi-step tool execution within a single user turn.
+Domain vocabulary for the hybrid AI agent template. See the [README](README.md) for setup and [ADRs](docs/adr/) for decision history.
 
 ## Language
 
-**Agent**:
-A running instance of the template scoped to a single user — receives messages, reasons over them using an LLM, executes tools as needed, and responds.
-_Avoid_: Bot, assistant, service
+Use these terms consistently; the last column lists ambiguous or misleading substitutes.
 
-**AgentPool**:
-The component that owns the `user_id → Agent` map, manages Agent lifecycle (create on first contact, evict on inactivity), and routes incoming messages to the correct Agent. Triggers Memory Sweep on eviction and shutdown.
-_Avoid_: Agent manager, session manager, router
+| Term | Meaning | Avoid |
+|---|---|---|
+| **Agent** | Running instance scoped to one user; receives messages, reasons with an LLM, executes Tools, and responds. | Bot, assistant, service |
+| **AgentPool** | Owns the `user_id → Agent` map, creates on first contact, routes messages, evicts on inactivity, and triggers Memory Sweeps on eviction/shutdown. | Agent manager, session manager, router |
+| **Session** | Persistent per-user conversation; ends on explicit reset via `new_session`, survives restarts/inactivity. ID is a zero-padded Unix nanosecond timestamp; latest session file is current. | Thread, conversation |
+| **Session Log** | Durable append-only JSONL record of Session messages; source for rebuilding Conversation History. | Chat log, message history, session store |
+| **Conversation History** | Recent Session Log messages reloaded on Agent creation/recreation (default 20), then extended during Agent turns and fed to the LLM. | Context, full history, message log |
+| **Storage Layout** | Per-user assets under `.storage/user/{user_id}/`; app logs at `.storage/logs/app.log`. | Flat per-asset directories at storage root |
+| **Cost Ledger** | Append-only `metrics/costs.jsonl` with one Usage Record per tracked LLM completion. | Usage log, token log, billing log |
+| **Usage Tracker** | `internal/usage` component reading `ResponseMeta.Usage`, estimating cost, writing the Cost Ledger, logging usage, and updating console counters. | Token tracker, billing tracker, usage logger |
+| **Usage Record** | One tracked Agent or Memory Distiller LLM call completion. | Token record, cost entry |
+| **Long-term Memory** | Facts, preferences, and outcomes distilled from Session Logs; persists across Sessions as Markdown files. | Unqualified memory, knowledge base |
+| **Memory Distiller** | One combined extraction/classification/summary operation per date per Memory Sweep, using existing daily content and new messages. | Ambiguous distiller, summarizer |
+| **Memory Sweep** | Distills unprocessed Session Log messages on inactivity, explicit reset, or shutdown; reset sweeps before starting a new Session. | Summarization, flush, persist |
+| **Sweep Cursor** | Line count in a Session's `.swept_until` file; selects new messages and advances only after facts/index are persisted. Failed sweeps leave the range available for retry. | Offset, pointer, checkpoint |
+| **Platform Adapter** | Implements `MessagePlatform`: `Connect`, `SendMessage`, `ReceiveMessages`, `Disconnect`; bridges CLI/Discord to the agent loop. | Connector, transport, integration |
+| **Transcriber** | `Transcribe(ctx, audioURL) (string, error)` dependency injected into Discord to convert audio attachments before agent processing; default uses OpenAI Whisper, nil disables it. | Speech-to-text, STT, voice converter |
+| **Tool** | Typed callable capability registered with the Agent and invoked by the LLM within a ReAct turn. | Function, plugin, skill |
+| **Schedule** | Per-user job with ID, prompt, delivery `channel_id`, `next_fire_at` Unix timestamp, and optional `interval_seconds`; no interval means one-shot. | Reminder in code, cron job, timer |
+| **Scheduler** | Loads Schedule Files at startup; owns runtime state in memory, ticks every 60 seconds, sends due prompts through AgentPool/Platform Adapter, and advances/removes jobs. | Cron, job runner, task queue |
+| **Schedule File** | Per-user `schedule/schedule.json`, written by Scheduler on add/cancel and after firing; read at startup. | Schedule store, schedule log |
 
-**Session**:
-A persistent conversation thread between a user and the agent. Created on first contact; ends only on explicit reset (via tool call or `--clean-session` flag at startup). Survives application restarts and inactivity periods. Identified by a zero-padded Unix nanosecond timestamp; the latest session file for a user is always the current Session.
-_Avoid_: Thread, conversation
+## Storage and Long-term Memory
 
-**Session Log**:
-The durable, append-only record of every message in a Session, written to disk as a JSONL file. Survives application restarts. Serves as the source from which Conversation History is reconstructed.
-_Avoid_: Chat log, message history, session store
+All paths below are relative to `.storage/user/{user_id}/`:
 
-**Conversation History**:
-The rolling window of recent messages loaded from the Session Log into the Agent's context when the Agent is created or recreated. Configurable count (default: last 20 messages). Fed into the LLM's context window each turn.
-_Avoid_: Context, full history, message log
+| Path | Contents / loading |
+|---|---|
+| `sessions/{session_id}.jsonl` | Session Log; new lines have schema version `v:1`, legacy unversioned lines remain readable. |
+| `sessions/{session_id}.swept_until` | Sweep Cursor counting physical JSONL lines. |
+| `memory/MEMORY.md` | Navigable index with daily summaries; loaded into the system prompt. |
+| `memory/general.md` | Stable facts; always loaded into the system prompt. |
+| `memory/daily/{date}.md` | Full facts for the date of the source messages; read on demand via `read_memory_file`. |
+| `schedule/schedule.json` | Durable Schedule File. |
+| `metrics/costs.jsonl` | Cost Ledger. |
 
-**Storage Layout**:
-All per-user assets live under `.storage/user/{user_id}/`: `memory/` for Long-term Memory files, `sessions/` for Session Logs and Sweep Cursors, `schedule/` for the Schedule File, and `metrics/` for the Cost Ledger. Application logs go to `.storage/logs/app.log`.
-_Avoid_: Flat per-asset directories at the storage root
+The Memory Distiller classifies facts as `[general]` or untagged. Every fact goes into the appropriate daily file; `[general]` facts also go into `general.md`. Its interface is `DistillAndSummarize(ctx, existingDaily string, messages) (facts, summary, err)`; the summary covers all facts in that daily file.
+`search_memory` performs keyword lookup across memory files; no vector store is required. User attribution comes from storage paths; sweep/usage operations also carry Session IDs.
 
-**Cost Ledger**:
-An append-only JSONL file at `.storage/user/{user_id}/metrics/costs.jsonl` that records one entry per LLM call completion. Each entry contains: `timestamp`, `component` (`agent` or `distiller`), `model`, `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost_usd`, and `session_id`. Written by the Usage Tracker after each LLM call by reading `ResponseMeta.Usage` on the returned message.
-_Avoid_: Usage log, token log, billing log
+## Usage tracking
 
-**Usage Tracker**:
-The component (`internal/usage`) that records LLM call completions by reading `ResponseMeta.Usage` on returned messages, calculates cost using a hardcoded pricing table, writes entries to the Cost Ledger, logs to slog, and maintains process-lifetime atomic token and cost counters for the console status line. Injected into the Agent via `WithUsageTracker` (closing over `userID` and `sessionID`) and into the Memory Distiller via `WithDistillerTracker`; the Sweeper injects `userID`/`sessionID` into the context before calling the Distiller so cost entries are attributed correctly. Unknown model names are priced at $0 with a warning logged.
-_Avoid_: Token tracker, billing tracker, usage logger
+Usage Records contain `timestamp`, `component` (`agent` or `distiller`), `model`, `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost_usd`, and `session_id`.
+`WithUsageTracker` binds user/Session IDs to the Agent. `WithDistillerTracker` injects tracking into the Memory Distiller; the Sweeper supplies those IDs in context.
+Costs use a hardcoded model pricing table; unknown models record $0 with a warning. Atomic console counters cover the process lifetime, while the Cost Ledger persists across restarts.
 
-**Usage Record**:
-A single entry in the Cost Ledger. Represents one LLM call completion — either an Agent turn or a Memory Distiller invocation.
-_Avoid_: Token record, cost entry
+## Relationships and lifecycle
 
-**Long-term Memory**:
-Distilled facts, preferences, or outcomes extracted from the Session Log by the Memory Sweep. Survives across Sessions. Stored under `memory/` as three file types: `MEMORY.md` (index, always loaded into the system prompt), `general.md` (stable facts, always loaded), and `daily/{date}.md` (all facts recorded on that date, browsed on demand via `read_memory_file`). The Distiller classifies each fact as `[general]` or untagged; **every fact is written to the daily file for the date of the messages it was extracted from**; `[general]` facts are additionally written to `general.md`. This layered model means daily files hold full detail, `MEMORY.md` holds navigable summaries, and `general.md` holds stable cross-day patterns that are always in context.
-_Avoid_: Memory (unqualified), knowledge base
+- Each user has one current Session and one Agent at a time; a Session has one Session Log.
+- Conversation History is the in-context view of that log, distinct from Long-term Memory.
+- An Agent executes zero or more Tools per user turn before returning a response.
+- Inactivity evicts the Agent and sweeps memory; the next message recreates it with history from the same Session.
+- Restart preserves the Session; explicit reset sweeps and starts a new Session.
+- Graceful shutdown on SIGTERM/SIGINT is load-bearing: it must trigger a Memory Sweep. Abrupt termination leaves logged messages awaiting later distillation.
 
-**Memory Distiller**:
-The LLM component responsible for a single combined operation per date per Memory Sweep: given the existing content of `daily/{date}.md` and the new messages for that date, it extracts new facts not already recorded, classifies each as `[general]` or untagged, and produces one updated summary sentence covering all facts in the daily file. Interface: `DistillAndSummarize(ctx, existingDaily string, messages) (facts, summary, err)`.
-_Avoid_: Distiller (unqualified when the operation is ambiguous), summarizer
+## Technology defaults and scope
 
-**Memory Sweep**:
-The summarization pass that reads unprocessed messages from the Session Log and distills what is worth keeping into Long-term Memory. Triggered by: inactivity timeout, explicit session reset (tool call), or application shutdown (SIGTERM/SIGINT). Processes only messages since the last sweep (tracked via the Sweep Cursor); on explicit reset it sweeps before starting the new Session.
-_Avoid_: Summarization, flush, persist
-
-**Sweep Cursor**:
-A line-count integer stored in a `.swept_until` file alongside each Session Log. Records how many lines of the Session Log have already been distilled. The Memory Sweep reads only from this offset to end-of-file and advances the cursor only after a successful distillation write. Prevents re-distilling already-processed messages when the sweep fires multiple times within a long-lived Session.
-_Avoid_: Offset, pointer, checkpoint
-
-**Platform Adapter**:
-Implements the `MessagePlatform` interface (`Connect`, `SendMessage`, `ReceiveMessages`, `Disconnect`). Bridges an external messaging surface (CLI, Discord, etc.) to the agent loop. Swapping adapters requires no changes to agent logic. Adapters may accept supplementary dependencies (e.g. a `Transcriber` for audio-to-text) that are injected at construction time via the constructor, keeping the core interface stable.
-_Avoid_: Connector, transport, integration
-
-**Transcriber**:
-An interface (`Transcribe(ctx, audioURL) (string, error)`) consumed by the Discord Platform Adapter to convert audio attachments into text before the message enters the agent pipeline. The default implementation calls OpenAI's Whisper API. Injected into the adapter at construction time; nil disables transcription.
-_Avoid_: Speech-to-text, STT, voice converter
-
-**Tool**:
-A typed, callable capability registered with the agent (e.g. web search). Invoked by the LLM during the ReAct loop within a single turn.
-_Avoid_: Function, plugin, skill
-
-**Schedule**:
-A single scheduled job entry owned by a user. Contains a prompt to inject, a `next_fire_at` Unix timestamp, an optional `interval_seconds` for recurrence, a `channel_id` for delivery, and a unique ID. One-shot Schedules have no `interval_seconds`; recurring Schedules advance `next_fire_at` by `interval_seconds` after each firing.
-_Avoid_: Reminder (in code), cron job, timer
-
-**Scheduler**:
-The component that manages all Schedules across all users. Loaded from each user's Schedule File on startup; kept in memory as the source of truth at runtime. A background goroutine ticks every 60 seconds, finds due Schedules, injects their prompt into the AgentPool, delivers the response via the Platform Adapter, and advances or removes the Schedule.
-_Avoid_: Cron, job runner, task queue
-
-**Schedule File**:
-A per-user JSON file at `.storage/user/{user_id}/schedule/schedule.json` that durably stores all Schedules for that user. Written on every mutation (add or cancel). Read only on startup to hydrate the Scheduler's in-memory state. Nothing else writes to this file at runtime.
-_Avoid_: Schedule store, schedule log
-
-## Relationships
-
-- A **Session** belongs to exactly one user; there is always exactly one active Session per user
-- A **Session** has one **Session Log**; **Conversation History** is a bounded view over that log
-- **Long-term Memory** entries are tagged with `user_id` and `session_id` for attribution
-- An **Agent** executes zero or more **Tools** per user turn before producing a response
-- Each user gets exactly one **Agent** instance at a time; the AgentPool evicts it on inactivity but recreates it on the next message, reloading Conversation History from the Session Log
-
-## Example dialogue
-
-> **Dev:** "Should we store every message the user sends in Long-term Memory?"
-> **Domain expert:** "No — the Session Log is the raw record. Long-term Memory is written deliberately by the Memory Sweep, only distilling what's worth keeping."
-
-> **Dev:** "If the app restarts, does the user lose their conversation?"
-> **Domain expert:** "No — the Agent reloads the last 20 messages from the Session Log. The Session persists; only the in-memory Agent instance is recreated."
-
-## Platform adapter delivery order
-
-1. **CLI** — stdin/stdout, ships in MVP. Used for local dev and integration tests.
-2. **Discord** — second adapter, demonstrates real platform integration.
-3. **GraphQL** — stretch goal; enables web and mobile clients via a streaming endpoint.
-
-## Known risks requiring validation
-
-- **Eino spike required** (see ADR-0002): before building AgentPool or any agent logic, verify that Eino's OpenAI provider + Tavily tool + ReAct loop works end-to-end in a throwaway program. If the spike fails, the framework choice must be revisited.
-
-## Stretch goals (not day-one scope)
-
-- **Topic Distiller** — a periodic process that scans `general.md`, identifies fact clusters (e.g. "wines", "games"), promotes them into `topics/{name}.md` files, and feeds those topic files as context back to the Memory Distiller. Allows long-term memory to self-organise into labelled topics rather than a flat list. `general.md` acts as a staging area until a cluster is large enough to warrant its own topic.
-
-- **Langfuse observability** — integration work done but activation deferred. When added, opt-in via `LANGFUSE_SECRET_KEY` env var; absent = no-op callback.
-- **GraphQL adapter** — see platform delivery order above.
-- **Slack adapter** — after Discord.
-
-## Technology defaults
-
-- **LLM provider**: OpenAI, model configurable (default: `gpt-5.5`). Accessed via Eino's OpenAI provider; model ID is a runtime config value, not hardcoded.
-- **Agent prompt files**: `prompts/soul.md` (character, tone, identity) and `prompts/instructions.md` (tool usage, guardrails, workflow). Loaded at startup and composed into the system prompt. Tool descriptions live in code, not in these files.
-- **Config**: `.env` file for local dev, env vars in production. `.env.example` committed to the repo documents every required variable. Secrets never go in config files.
-- **Web search**: Tavily (default). Provider is a config value; Brave is the documented alternative.
-
-## Key operational constraints
-
-- **Graceful shutdown is load-bearing**: the Memory Sweep must be triggered on SIGTERM/SIGINT, not only on inactivity timeout. Running in Docker means the container may be stopped at any time; unswept Sessions lose their Long-term Memory distillation.
-
-## Flagged ambiguities
-
-- "memory" used without qualification could mean **Conversation History**, **Session Log**, or **Long-term Memory** — always qualify.
-- "session history" is ambiguous — use **Session Log** for the full durable record, **Conversation History** for the in-context window.
+OpenAI is accessed through Eino; the runtime model defaults to `gpt-5.5`. Tavily is the implemented web-search provider. [Configuration](docs/configuration.md) covers environment values and embedded/runtime prompt loading; tool descriptions live in code.
+CLI and Discord ship today. Platform-specific dependencies such as a Transcriber are injected through constructors, keeping the core messaging interface stable.
+See the [roadmap](docs/roadmap.md) for tracing, retry/backoff, Topic Distiller, and additional adapters.
+Always qualify “memory” as Conversation History, Session Log, or Long-term Memory; avoid “session history,” which conflates the durable log with the in-context window.

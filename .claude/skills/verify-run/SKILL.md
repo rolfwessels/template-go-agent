@@ -16,9 +16,9 @@ The issue file path.
 Inspect the project to find:
 - **Build command**: `make build`, `go build`, `cargo build`, etc.
 - **Run command**: `./bin/app`, `make run`, `docker compose up`, etc.
-- **Required env vars**: read `README.md`, `.env.example`, `Makefile`. Note any that look like credentials or external-service config.
+- **Required env vars**: read [configuration](../../../docs/configuration.md), `.env.example`, `Makefile`. Note any that look like credentials or external-service config.
 
-Sources to check, in order: `Makefile`, `README.md`, `docker-compose.yml`, the CI config.
+Sources to check, in order: `Makefile`, [quick start](../../../README.md#-quick-start), [development](../../../docs/development.md), `docker-compose.yml`, the CI config.
 
 If running requires credentials that aren't available locally, jump to Step 4 with verdict `SKIPPED` and the reason.
 
