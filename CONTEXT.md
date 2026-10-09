@@ -64,5 +64,6 @@ Costs use a hardcoded model pricing table; unknown models record $0 with a warni
 
 OpenAI is accessed through Eino; the runtime model defaults to `gpt-5.5`. Tavily is the implemented web-search provider. [Configuration](docs/configuration.md) covers environment values and embedded/runtime prompt loading; tool descriptions live in code.
 CLI and Discord ship today. Platform-specific dependencies such as a Transcriber are injected through constructors, keeping the core messaging interface stable.
+`make start` runs either adapter based on config. `make build` rebuilds the Compose dev image; `make publish` creates release archives in `dist/`. See [development](docs/development.md) or `make help` for commands.
 See the [roadmap](docs/roadmap.md) for tracing, retry/backoff, Topic Distiller, and additional adapters.
 Always qualify “memory” as Conversation History, Session Log, or Long-term Memory; avoid “session history,” which conflates the durable log with the in-context window.

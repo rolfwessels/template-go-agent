@@ -43,7 +43,7 @@ Prefer running locally? With Go 1.26 installed, `make test` and `make start` als
 Released binaries for Linux, macOS, and Windows are on the [releases page](https://github.com/rolfwessels/template-go-agent/releases); run `template-go-agent` (`template-go-agent.exe` on Windows) from a directory containing `.env`, or supply environment variables.
 
 State and logs live in `.storage/` under the working directory; keep it to preserve sessions, memory, reminders, and usage records.
-On the host, `make down` stops the dev container.
+On the host, `make shell` reattaches to the running dev container; `make down` stops it. Run `make help` to list commands.
 
 ## 🗂 Docs
 

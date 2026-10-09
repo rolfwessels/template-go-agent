@@ -30,7 +30,7 @@ If nothing user-facing changed, say so and skip.
 
 Run the full test suite. If the project uses a dev container (this one does — see the `dev-container` skill): `docker compose exec -T dev make test`. Otherwise infer (`make test`, `go test ./...`, etc.).
 
-If integration tests exist (`make test-integration`, `*_integration_test.go`, dedicated script), run them too unless they require unavailable credentials — note any skip explicitly.
+`make test` includes the integration tests in `internal/integration` and `internal/agent`; no separate target is needed. Note any tests skipped for unavailable credentials.
 
 If anything fails, stop and report. Don't commit broken code.
 

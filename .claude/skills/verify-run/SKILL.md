@@ -14,8 +14,8 @@ The issue file path.
 ## Step 1 — Determine how to run
 
 Inspect the project to find:
-- **Build command**: `make build`, `go build`, `cargo build`, etc.
-- **Run command**: `./bin/app`, `make run`, `docker compose up`, etc.
+- **Build command**: `go build -o ./dist/template-go-agent ./cmd/template-go-agent` for the app; `make build` only rebuilds the Compose dev image.
+- **Run command**: `make start` or `./dist/template-go-agent`; leave `DISCORD_TOKEN` empty for CLI mode. `make up` starts Compose and attaches a shell.
 - **Required env vars**: read [configuration](../../../docs/configuration.md), `.env.example`, `Makefile`. Note any that look like credentials or external-service config.
 
 Sources to check, in order: `Makefile`, [quick start](../../../README.md#-quick-start), [development](../../../docs/development.md), `docker-compose.yml`, the CI config.
