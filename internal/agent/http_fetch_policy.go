@@ -215,7 +215,7 @@ func guardedFetchTransport(p config.HTTPFetchPolicy, network fetchNetwork) *http
 			} else {
 				addresses, err = network.lookup(ctx, host)
 				if err != nil {
-					return nil, fetchPolicyError("dns_failed")
+					return nil, safeFetchNetworkError(ctx, "dns_failed", err)
 				}
 			}
 			if len(addresses) == 0 {
@@ -232,11 +232,11 @@ func guardedFetchTransport(p config.HTTPFetchPolicy, network fetchNetwork) *http
 				if err == nil {
 					return conn, nil
 				}
-				if ctx.Err() != nil {
-					return nil, ctx.Err()
+				if contextErr := safeContextError(ctx, err); contextErr != nil {
+					return nil, errors.Join(fetchPolicyError("dial_failed"), contextErr)
 				}
 			}
-			return nil, fetchPolicyError("dial_failed")
+			return nil, safeFetchNetworkError(ctx, "dial_failed", nil)
 		},
 		TLSHandshakeTimeout: 10 * time.Second, ResponseHeaderTimeout: 10 * time.Second,
 		MaxResponseHeaderBytes: 64 << 10, MaxIdleConns: 20, MaxIdleConnsPerHost: 2,
@@ -244,7 +244,19 @@ func guardedFetchTransport(p config.HTTPFetchPolicy, network fetchNetwork) *http
 	}
 }
 
-func safeFetchError(ctx context.Context, err error) error {
+// Keep only the safe policy code and a canonical context error. Wrapping the
+// raw resolver/dial error could expose destination or request details.
+func safeFetchNetworkError(ctx context.Context, code fetchPolicyError, err error) error {
+	if contextErr := safeContextError(ctx, err); contextErr != nil {
+		return errors.Join(code, contextErr)
+	}
+	return code
+}
+
+// An operation's context can expire before the request context's timer fires.
+// Preserve that identity even while ctx.Err() is still nil, without retaining
+// any potentially sensitive text in err.
+func safeContextError(ctx context.Context, err error) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -253,6 +265,13 @@ func safeFetchError(ctx context.Context, err error) error {
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return context.DeadlineExceeded
+	}
+	return nil
+}
+
+func safeFetchError(ctx context.Context, err error) error {
+	if contextErr := safeContextError(ctx, err); contextErr != nil {
+		return contextErr
 	}
 	var policy fetchPolicyError
 	if errors.As(err, &policy) {

@@ -214,3 +214,46 @@ func TestTavilyCallerContextAndErrorRedaction(t *testing.T) {
 		})
 	}
 }
+
+func TestTavilyContextErrorRedaction(t *testing.T) {
+	for _, stage := range []string{"transport", "body", "response_context_error", "response_context_eof"} {
+		for _, contextErr := range []error{context.DeadlineExceeded, context.Canceled} {
+			t.Run(fmt.Sprintf("%s/%s", stage, contextErr), func(t *testing.T) {
+				callerCtx := context.Background()
+				tool := newTavilyTool("SECRET_API_KEY").(*tavilyTool)
+				tool.client.Transport = tavilyRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+					assert.NoError(t, req.Context().Err())
+					failure := fmt.Errorf("SECRET_API_KEY transport/body detail: %w", contextErr)
+					if stage == "transport" {
+						return nil, failure
+					}
+					if strings.HasPrefix(stage, "response_context_") {
+						// Only the response's context has completed; the caller's
+						// timer need not have fired when a raw body error arrives.
+						var responseCtx context.Context
+						var cancel context.CancelFunc
+						if contextErr == context.DeadlineExceeded {
+							responseCtx, cancel = context.WithDeadline(callerCtx, time.Now().Add(-time.Hour))
+						} else {
+							responseCtx, cancel = context.WithCancel(callerCtx)
+							cancel()
+						}
+						defer cancel()
+						req = req.WithContext(responseCtx)
+						failure = errors.New("body read failed: SECRET_API_KEY")
+						if stage == "response_context_eof" {
+							failure = io.EOF
+						}
+					}
+					return &http.Response{StatusCode: http.StatusOK, Request: req, Body: io.NopCloser(fetchErrorReader{failure})}, nil
+				})
+				_, err := tool.InvokableRun(callerCtx, `{"query":"research"}`)
+				require.Error(t, err)
+				assert.NoError(t, callerCtx.Err())
+				assert.ErrorIs(t, err, contextErr)
+				assert.NotContains(t, err.Error(), "SECRET")
+				assert.NotContains(t, err.Error(), "http_fetch")
+			})
+		}
+	}
+}

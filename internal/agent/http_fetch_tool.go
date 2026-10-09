@@ -110,7 +110,8 @@ func (h *httpFetchTool) InvokableRun(ctx context.Context, args string, _ ...tool
 		code := "ok"
 		if resultErr != nil {
 			code = "request_failed"
-			if e, ok := resultErr.(fetchPolicyError); ok {
+			var e fetchPolicyError
+			if errors.As(resultErr, &e) {
 				code = string(e)
 			}
 			if errors.Is(resultErr, context.DeadlineExceeded) {

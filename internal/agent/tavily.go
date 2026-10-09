@@ -124,16 +124,18 @@ func (t *tavilyTool) search(ctx context.Context, query string) (string, error) {
 	}
 
 	raw, truncated, err := readFetchLimit(resp.Body, tavilyMaxResponseBytes)
+	// Client.Timeout can finish the response context before the caller context.
+	// Consult it for both body errors and EOF at the deadline boundary.
+	if resp.Request != nil {
+		if contextErr := safeContextError(resp.Request.Context(), err); contextErr != nil {
+			return "", safeTavilyError(ctx, contextErr)
+		}
+	}
 	if err != nil {
 		return "", safeTavilyError(ctx, err)
 	}
 	if ctx.Err() != nil {
 		return "", ctx.Err()
-	}
-	// Client.Timeout may close the connection as an EOF at the body boundary.
-	// Its request context retains the deadline error even in that case.
-	if resp.Request != nil && errors.Is(resp.Request.Context().Err(), context.DeadlineExceeded) {
-		return "", context.DeadlineExceeded
 	}
 	if truncated {
 		return "", fmt.Errorf("response_limit")
@@ -149,14 +151,8 @@ func (t *tavilyTool) search(ctx context.Context, query string) (string, error) {
 // Raw transport/body errors may contain request data. Preserve cancellation
 // identity for callers while exposing only a fixed code for other failures.
 func safeTavilyError(ctx context.Context, err error) error {
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	if errors.Is(err, context.Canceled) {
-		return context.Canceled
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return context.DeadlineExceeded
+	if contextErr := safeContextError(ctx, err); contextErr != nil {
+		return contextErr
 	}
 	return errors.New("request_failed")
 }

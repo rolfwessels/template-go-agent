@@ -3,11 +3,14 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/rolfwessels/template-go-agent/internal/config"
 	"github.com/stretchr/testify/assert"
@@ -123,6 +126,83 @@ func TestGuardedDNSDeadline(t *testing.T) {
 	_, err := tr.DialContext(ctx, "tcp", "example.com:80")
 	require.Error(t, err)
 	assert.ErrorIs(t, safeFetchError(ctx, err), context.Canceled)
+}
+
+// Model a request whose deadline has elapsed but whose timer has not fired.
+// WithDeadline in boundedFetchDialContext expires synchronously, while this
+// context's Err and Done remain untouched. No sleeps or timer ordering needed.
+type fetchPendingDeadlineContext struct {
+	context.Context
+	deadline time.Time
+}
+
+func (c fetchPendingDeadlineContext) Deadline() (time.Time, bool) { return c.deadline, true }
+
+func TestGuardedDialPreservesContextErrors(t *testing.T) {
+	for _, stage := range []string{"dns", "dial"} {
+		for _, contextErr := range []error{context.DeadlineExceeded, context.Canceled} {
+			for _, doneContext := range []bool{true, false} {
+				t.Run(fmt.Sprintf("%s/%s/done_context=%t", stage, contextErr, doneContext), func(t *testing.T) {
+					requestCtx := context.Context(context.Background())
+					if doneContext && contextErr == context.DeadlineExceeded {
+						requestCtx = fetchPendingDeadlineContext{Context: requestCtx, deadline: time.Now().Add(-time.Hour)}
+					}
+					// Transport's dial context has detached request cancellation.
+					dialCtx := context.WithValue(context.Background(), fetchRequestContextKey{}, requestCtx)
+					if doneContext && contextErr == context.Canceled {
+						var cancel context.CancelFunc
+						dialCtx, cancel = context.WithCancel(dialCtx)
+						cancel()
+					}
+					failure := func(ctx context.Context) error {
+						if doneContext {
+							assert.ErrorIs(t, ctx.Err(), contextErr)
+							return errors.New("resolver/dial SECRET_HOST 10.0.0.1 SECRET_DETAIL")
+						}
+						assert.NoError(t, ctx.Err())
+						return fmt.Errorf("resolver/dial SECRET_HOST 10.0.0.1 SECRET_DETAIL: %w", contextErr)
+					}
+					var dialCalls int
+					tr := guardedFetchTransport(config.DefaultHTTPFetchPolicy(), fetchNetwork{
+						lookup: func(ctx context.Context, _ string) ([]netip.Addr, error) {
+							if stage == "dns" {
+								return nil, failure(ctx)
+							}
+							return []netip.Addr{netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("1.1.1.1")}, nil
+						},
+						dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
+							dialCalls++
+							return nil, failure(ctx)
+						},
+					})
+					_, err := tr.DialContext(dialCtx, "tcp", "example.com:443")
+					require.Error(t, err)
+					assert.NoError(t, requestCtx.Err(), "request timer has not fired")
+					assert.ErrorIs(t, err, contextErr)
+					var policy fetchPolicyError
+					require.ErrorAs(t, err, &policy)
+					assert.Equal(t, fetchPolicyError(stage+"_failed"), policy)
+					assert.NotContains(t, err.Error(), "SECRET")
+					assert.NotContains(t, err.Error(), "10.0.0.1")
+					// http.Client adds a URL wrapper; sanitization must still find
+					// the context error and discard all request details.
+					safeErr := safeFetchError(requestCtx, &url.Error{Op: "Get", URL: "https://SECRET_URL", Err: err})
+					assert.ErrorIs(t, safeErr, contextErr)
+					assert.NotContains(t, safeErr.Error(), "SECRET")
+					if stage == "dns" {
+						assert.Zero(t, dialCalls)
+					} else {
+						assert.Equal(t, 1, dialCalls, "context errors must stop retries")
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestSafeFetchErrorPreservesPolicyCode(t *testing.T) {
+	err := &url.Error{Op: "Get", URL: "https://SECRET_URL", Err: fetchPolicyError("address_denied")}
+	assert.Equal(t, fetchPolicyError("address_denied"), safeFetchError(context.Background(), err))
 }
 
 func TestHTTPFetchRedirectPolicyChecks(t *testing.T) {
