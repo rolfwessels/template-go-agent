@@ -21,7 +21,7 @@ If multiple `in-progress` issues exist and no path is passed, ask the user which
 Read the issue's `## What to build`, `## Implementation notes`, and `## Refactor notes`. Then:
 
 1. **`CONTEXT.md`** — sharpen any domain terms introduced or clarified by this issue. Only touch entries that are incomplete, missing, or wrong. Do not rewrite accurate content.
-2. **`README.md`** — update the quick-start / usage section if user-facing behaviour changed (new commands, new env vars, different startup).
+2. **[README.md](../../../README.md)** — update quick start when startup/usage changes; document env vars in [configuration](../../../docs/configuration.md), commands in [development](../../../docs/development.md), and fetch policy in [HTTP fetch security](../../../docs/http-fetch-security.md).
 3. Other docs referenced in the issue.
 
 If nothing user-facing changed, say so and skip.

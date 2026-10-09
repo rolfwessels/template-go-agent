@@ -5,6 +5,8 @@ description: Integration-tests the memory sweep by building the chat binary, see
 
 # Memory Sweep Test
 
+The `cmd/chat` test harness (with `--clean`, `--user` and `--seed`) is not in this repo yet; until it is, run `docker compose exec -T dev make test` instead (which covers the memory sweep integration tests).
+
 Runs the real binary against real OpenAI so the full stack is exercised: agent → LLM → memory sweep → distiller → Cost Ledger. This is the final verification step after any change to agent wiring, the distiller, the sweeper, or usage tracking.
 
 ## Quick start

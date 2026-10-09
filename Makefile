@@ -58,7 +58,6 @@ help:
 	@echo " Service Targets (should only be run inside the docker container)"
 	@echo " - version       : Show current version number"
 	@echo " - start         : Run the $(project)"
-	@echo " - chat          : Interactive CLI chat (local test harness, always CLI mode)"
 	@echo " - vet           : Vet the $(project)"
 	@echo " - test          : Vet and test the $(project)"
 	@echo " - publish       : Publish the $(project)"
@@ -70,7 +69,6 @@ help:
 	@echo " - docker-pull-short-tag : Pull the docker image based on git short hash"
 	@echo " - docker-tag-env        : Tag the docker image based on the environment"
 	@echo " - docker-publish        : Publish the docker image"
-	@echo " - deploy        : Deploy the $(project)"
 	@echo " - update-packages : Update Go dependencies"
 	@echo ""
 	@echo "Options:"
@@ -80,7 +78,6 @@ help:
 	@echo " - Start Docker Container        : make up"
 	@echo " - Rebuild Docker Container      : make build"
 	@echo " - Rebuild & Start Docker Container : make build up"
-	@echo " - Publish and deploy            : make publish deploy env=dev"
 
 up:
 	@echo "Starting containers..."
@@ -105,10 +102,6 @@ print-version:
 start:
 	@echo -e "Starting $(project)"
 	@go run ./cmd/$(binary)
-
-chat:
-	@echo -e "Starting chat (CLI mode, user=local)"
-	@go run ./cmd/chat
 
 vet:
 	@echo -e "Vetting ${GREEN}v$(version)${NC}"
@@ -179,9 +172,6 @@ docker-tag-env: env-check
 
 docker-publish: docker-build docker-login docker-push
 	@echo -e "Done"
-
-deploy: env-check
-	@echo -e "Deploying ${GREEN}v$(version-full)${NC}"
 
 update-packages:
 	@echo "Updating Go dependencies to latest versions..."

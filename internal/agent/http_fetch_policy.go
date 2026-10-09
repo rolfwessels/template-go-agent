@@ -21,7 +21,7 @@ func (e fetchPolicyError) Error() string { return "http_fetch: " + string(e) }
 // Conservative special-purpose table based on the IANA IPv4/IPv6 registries:
 // https://www.iana.org/assignments/iana-ipv4-special-registry/
 // https://www.iana.org/assignments/iana-ipv6-special-registry/
-// See README for the categories. Normalize mapped IPv6 BEFORE this table.
+// See docs/http-fetch-security.md for the categories. Normalize mapped IPv6 BEFORE this table.
 var forbiddenPrefixes = func() []netip.Prefix {
 	cidrs := []string{
 		"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12",
