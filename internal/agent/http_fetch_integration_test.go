@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"net/netip"
 	"testing"
 
@@ -82,4 +85,59 @@ func TestHTTPFetchErrorAndLogRedaction(t *testing.T) {
 	assert.Contains(t, logs.String(), `"duration_ms":`)
 	assert.Contains(t, logs.String(), `"status":`)
 	assert.NotContains(t, logs.String(), `"args":`)
+}
+
+type fetchRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f fetchRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+type fetchErrorReader struct{ err error }
+
+func (r fetchErrorReader) Read([]byte) (int, error) { return 0, r.err }
+
+func TestHTTPFetchContextErrorLogs(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	for _, stage := range []string{"dns", "dial", "body"} {
+		for _, contextErr := range []error{context.DeadlineExceeded, context.Canceled} {
+			t.Run(fmt.Sprintf("%s/%s", stage, contextErr), func(t *testing.T) {
+				logs.Reset()
+				failure := fmt.Errorf("SECRET_HOST 10.0.0.1 SECRET_DETAIL: %w", contextErr)
+				h := newHTTPFetchToolWithNetwork(config.DefaultHTTPFetchPolicy(), fetchNetwork{
+					lookup: func(ctx context.Context, _ string) ([]netip.Addr, error) {
+						assert.NoError(t, ctx.Err())
+						if stage == "dns" {
+							return nil, failure
+						}
+						return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
+					},
+					dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
+						assert.NoError(t, ctx.Err())
+						return nil, failure
+					},
+				})
+				t.Cleanup(h.client.CloseIdleConnections)
+				if stage == "body" {
+					h.client.Transport = fetchRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+						assert.NoError(t, req.Context().Err())
+						return &http.Response{StatusCode: http.StatusOK, Request: req, Body: io.NopCloser(fetchErrorReader{failure})}, nil
+					})
+				}
+				_, err := h.InvokableRun(context.Background(), `{"url":"https://example.com/SECRET_PATH"}`)
+				require.Error(t, err)
+				assert.ErrorIs(t, err, contextErr)
+				assert.NotContains(t, err.Error(), "SECRET")
+				assert.NotContains(t, err.Error(), "10.0.0.1")
+				code := "timeout"
+				if contextErr == context.Canceled {
+					code = "canceled"
+				}
+				assert.Contains(t, logs.String(), `"code":"`+code+`"`)
+				assert.NotContains(t, logs.String(), "SECRET")
+				assert.NotContains(t, logs.String(), "10.0.0.1")
+			})
+		}
+	}
 }

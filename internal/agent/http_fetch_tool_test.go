@@ -405,27 +405,36 @@ func TestHTTPFetchOriginalContextBoundsDNS(t *testing.T) {
 			entered := make(chan struct{})
 			stopped := make(chan struct{})
 			p := config.DefaultHTTPFetchPolicy()
-			p.MaxTimeoutMS = 40
+			p.MaxTimeoutMS = 10000
+			// The caller's earlier deadline must reach DNS even though Transport
+			// detaches cancellation for pooled dials. Timeouts only guard hangs;
+			// the fake resolver controls the error without racing real timers.
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			requestDeadline, _ := ctx.Deadline()
 			h := newHTTPFetchToolWithNetwork(p, fetchNetwork{
 				lookup: func(ctx context.Context, _ string) ([]netip.Addr, error) {
 					close(entered)
 					deadline, ok := ctx.Deadline()
 					assert.True(t, ok)
-					assert.LessOrEqual(t, time.Until(deadline), 40*time.Millisecond)
-					<-ctx.Done()
+					assert.Equal(t, requestDeadline, deadline)
+					if cancelEarly {
+						<-ctx.Done()
+					}
 					close(stopped)
-					return nil, ctx.Err()
+					if cancelEarly {
+						return nil, ctx.Err()
+					}
+					return nil, context.DeadlineExceeded
 				},
 				dial: func(context.Context, string, string) (net.Conn, error) { t.Error("unexpected dial"); return nil, nil },
 			})
 			t.Cleanup(h.client.CloseIdleConnections)
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
 			result := make(chan error, 1)
 			go func() { _, err := h.InvokableRun(ctx, `{"url":"https://example.com"}`); result <- err }()
 			select {
 			case <-entered:
-			case <-time.After(time.Second):
+			case <-time.After(5 * time.Second):
 				t.Fatal("resolver never entered")
 			}
 			if cancelEarly {
@@ -436,14 +445,15 @@ func TestHTTPFetchOriginalContextBoundsDNS(t *testing.T) {
 				if cancelEarly {
 					assert.ErrorIs(t, err, context.Canceled)
 				} else {
+					assert.NoError(t, ctx.Err(), "resolver deadline must survive before the caller timer fires")
 					assert.ErrorIs(t, err, context.DeadlineExceeded)
 				}
-			case <-time.After(time.Second):
+			case <-time.After(5 * time.Second):
 				t.Fatal("request was not canceled")
 			}
 			select {
 			case <-stopped:
-			case <-time.After(time.Second):
+			case <-time.After(5 * time.Second):
 				t.Fatal("transport detached DNS from the request context")
 			}
 		})

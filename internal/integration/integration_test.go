@@ -66,11 +66,22 @@ func (d *stubDistiller) DistillAndSummarize(_ context.Context, _ string, _ []*sc
 
 // newTestPool creates an AgentPool wired to a temp FileStore, SessionStore, and stub distiller.
 // The factory fn is called for each new user session and receives the loaded memory context.
-func newTestPool(t *testing.T, dir string, distillerFacts []memory.Fact, timeout time.Duration, makeGen func() *spyGenerator) (*agent.AgentPool, *memory.FileStore) {
+// Optional onSweep callbacks run after the real sweeper finishes.
+func newTestPool(t *testing.T, dir string, distillerFacts []memory.Fact, timeout time.Duration, makeGen func() *spyGenerator, onSweep ...func(error)) (*agent.AgentPool, *memory.FileStore) {
 	t.Helper()
 	fileStore := memory.NewFileStore(dir)
 	sessions := memory.NewSessionStore(dir)
 	sweeper := memory.NewSweeper(fileStore, &stubDistiller{facts: distillerFacts}, sessions)
+	var observer agent.EvictionObserver = sweeper
+	if len(onSweep) > 0 {
+		observer = agent.EvictionFunc(func(ctx context.Context, userID, sessionID string) error {
+			err := sweeper.OnEvict(ctx, userID, sessionID)
+			for _, notify := range onSweep {
+				notify(err)
+			}
+			return err
+		})
+	}
 
 	pool := agent.NewPool(
 		func(ctx context.Context, userID, _ string, history []*schema.Message) (*agent.Agent, error) {
@@ -78,7 +89,7 @@ func newTestPool(t *testing.T, dir string, distillerFacts []memory.Fact, timeout
 			return agent.NewWithGenerator(makeGen(), "base-prompt", agent.WithMemoryContext(memCtx), agent.WithInitialHistory(history)), nil
 		},
 		timeout,
-		sweeper,
+		observer,
 		agent.WithRecordHook(func(userID, sessionID, role, content string) {
 			_ = sessions.Append(userID, sessionID, role, content)
 		}),
@@ -117,15 +128,22 @@ func TestIntegration_TimeoutTriggersMemorySweep(t *testing.T) {
 	// arrange
 	dir := t.TempDir()
 	ctx := context.Background()
+	sweepDone := make(chan error, 1)
 	pool, fileStore := newTestPool(t, dir, []memory.Fact{{Content: "remembered fact", Kind: memory.KindGeneral}}, 20*time.Millisecond, func() *spyGenerator {
 		return &spyGenerator{response: "ok"}
-	})
+	}, func(err error) { sweepDone <- err })
+	t.Cleanup(func() { require.NoError(t, pool.Shutdown(ctx)) })
 
 	// act — send a message then wait for inactivity timeout
 	_, err := pool.Send(ctx, "alice", "", "something memorable")
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
+	select {
+	case err := <-sweepDone:
+		require.NoError(t, err, "idle eviction sweep failed")
+	case <-time.After(5 * time.Second):
+		t.Fatal("idle timeout did not complete the memory sweep")
+	}
 
 	// assert — at least one file written for alice
 	memCtx, err := fileStore.AllAsContext(ctx, "alice")
