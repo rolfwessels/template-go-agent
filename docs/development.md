@@ -1,26 +1,29 @@
 # 💻 Development
 
-Use the [quick start](../README.md#-quick-start) for setup. Commands below are defined in the [Makefile](../Makefile); Go commands work in the dev shell or locally with Go 1.26 and the needed tools. Outside the container, Go targets print one short warning; help and version output stay quiet.
+Use the [quick start](../README.md#-quick-start) for setup. Commands below are defined in the [Makefile](../Makefile); service commands work in the dev shell or locally with Go 1.26 and the needed tools.
 
 ## Make commands
 
 | Command | Purpose |
 |---|---|
-| `make` / `make help` | List commands from target descriptions in the Makefile. |
 | `make up` | On host: start Compose and attach a zsh dev shell. |
 | `make down` | On host: stop Compose. |
 | `make build` | On host: stop Compose, then rebuild the dev image. |
-| `make shell` | On host: attach zsh to the running dev container. |
 | `make start` | Run `go run ./cmd/template-go-agent`; CLI or Discord based on config. |
 | `make vet` | Run `go vet ./...`. |
 | `make test` | Vet, then run all tests verbosely without cached results. |
 | `make version` / `make print-version` | Display version / emit the plain version for scripts. |
 | `make publish` | Replace `dist/` with binary-only archives for five platforms (requires tar/zip). |
+| `make install` / `make uninstall` | On host: link/unlink the Linux amd64 release binary in `~/.local/bin`; publish first. |
 | `make docker-build` | Build the production `runtime` image with version and branch tags. |
+| `make docker-login` | Interactive Docker Hub login. |
 | `make docker-push` | Push all local tags for `rolfwessels/template-go-agent`. |
-| `make docker-publish` | Build and push; run `docker login` first. |
+| `make docker-publish` | Build, log in, and push. |
+| `make docker-pull-short-tag` | Pull the current commit's short-SHA image. |
+| `make docker-tag-env env=dev` | Locally tag the short-SHA image as `dev` (`prod` also supported). |
+| `make update-packages` | Update Go dependencies and tidy the module. |
 
-For CLI chat, use `make start` with `DISCORD_TOKEN` empty. Deployment is handled separately from image publishing. To compile locally, use `go build ./...`; `make build` rebuilds Compose.
+For CLI chat, run `make start` with `DISCORD_TOKEN` empty.
 
 ## Versioning and PRs
 
@@ -54,5 +57,5 @@ CI publishes `linux/amd64` and `linux/arm64` images to `rolfwessels/template-go-
 | `<short-sha>` | 8-character short SHA via `git rev-parse --short=8 HEAD`. |
 
 Configure repository Actions secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (a Docker Hub token with push access).
-Local publishing: run `docker login`, then `make docker-publish` (or `make docker-build docker-push`). CI authenticates with `docker/login-action` using those secrets. Off `main`, local tags are `alpha`, `<short-sha>`, and `v<version-full>`; `latest` is only added on `main`. Local `docker-build` builds for the local platform; CI handles both architectures.
+Local publishing: `make docker-build docker-login docker-push`, or `make docker-publish`. Off `main`, local tags are `alpha`, `<short-sha>`, and `v<version-full>`; `latest` is only added on `main`. Local `docker-build` builds for the local platform; CI handles both architectures.
 Runtime state is under `.storage/` in the working directory; mount persistent storage when running a production container.
