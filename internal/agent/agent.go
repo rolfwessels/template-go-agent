@@ -107,6 +107,11 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 		return nil, err
 	}
 
+	tools, err := researchTools(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	model, err := einoopenai.NewChatModel(ctx, &einoopenai.ChatModelConfig{
 		APIKey: cfg.OpenAIAPIKey,
 		Model:  cfg.OpenAIModel,
@@ -117,7 +122,7 @@ func New(ctx context.Context, cfg *config.Config, opts ...Option) (*Agent, error
 		return nil, fmt.Errorf("creating chat model: %w", err)
 	}
 
-	tools := []tool.BaseTool{newTavilyTool(cfg.TavilyAPIKey), newCurrentTimeTool(), newDateMathTool(), newHTTPFetchTool(), newCalculatorTool()}
+	tools = append(tools, newCurrentTimeTool(), newDateMathTool(), newCalculatorTool())
 	if a.resetCallback != nil {
 		tools = append(tools, newNewSessionTool(a.resetCallback))
 	}
@@ -207,7 +212,7 @@ func (r *reactMsgGenerator) generate(ctx context.Context, input []*schema.Messag
 			return nil, iterErr
 		}
 		for _, tc := range msg.ToolCalls {
-			slog.Info("tool call", "tool", tc.Function.Name, "args", tc.Function.Arguments)
+			slog.Info("tool call", "tool", tc.Function.Name, "event", "invoked")
 		}
 		msgs = append(msgs, msg)
 	}
@@ -255,4 +260,16 @@ func loadPrompts(dir string) (string, error) {
 		return "", fmt.Errorf("loading instructions prompt from PROMPTS_DIR %q (both soul.md and instructions.md are required): %w", dir, instructionsErr)
 	}
 	return string(soul) + "\n\n" + string(instructions), nil
+}
+
+// researchTools keeps policy validation and tool registration testable without API calls.
+func researchTools(cfg *config.Config) ([]tool.BaseTool, error) {
+	if err := cfg.HTTPFetch.Validate(); err != nil {
+		return nil, err
+	}
+	tools := []tool.BaseTool{newTavilyTool(cfg.TavilyAPIKey)}
+	if cfg.HTTPFetch.Enabled {
+		tools = append(tools, newHTTPFetchTool(cfg.HTTPFetch))
+	}
+	return tools, nil
 }

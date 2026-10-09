@@ -122,6 +122,7 @@ func TestNew_UsesConfiguredOverrides(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "instructions.md"), []byte("custom instructions"), 0600))
 
 	a, err := New(context.Background(), &config.Config{
+		HTTPFetch:    config.DefaultHTTPFetchPolicy(),
 		OpenAIAPIKey: "test-openai",
 		OpenAIModel:  "test-model",
 		TavilyAPIKey: "test-tavily",
