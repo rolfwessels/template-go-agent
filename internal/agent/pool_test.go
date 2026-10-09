@@ -65,7 +65,8 @@ func TestAgentPool_TimeoutCreatesNewAgent(t *testing.T) {
 		count++
 		return &Agent{react: newFakeGenerator("ok"), systemPrompt: "sys"}, nil
 	}
-	pool := NewPool(factory, 20*time.Millisecond, nil)
+	clock := &manualTimers{}
+	pool := NewPool(factory, time.Minute, nil, clock.option())
 	ctx := context.Background()
 
 	// act — first message creates agent
@@ -73,7 +74,7 @@ func TestAgentPool_TimeoutCreatesNewAgent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 
-	time.Sleep(60 * time.Millisecond)
+	clock.timer(t, 0).fire()
 
 	// second message after timeout creates a fresh agent
 	_, err = pool.Send(ctx, "user1", "", "hello again")
@@ -116,7 +117,8 @@ func TestAgentPool_DestroyHookCalledOnTimeout(t *testing.T) {
 		called <- userID
 		return nil
 	})
-	pool := NewPool(stubFactory(), 20*time.Millisecond, hook)
+	clock := &manualTimers{}
+	pool := NewPool(stubFactory(), time.Minute, hook, clock.option())
 	ctx := context.Background()
 
 	// act
@@ -124,12 +126,8 @@ func TestAgentPool_DestroyHookCalledOnTimeout(t *testing.T) {
 	require.NoError(t, err)
 
 	// assert
-	select {
-	case uid := <-called:
-		assert.Equal(t, "user1", uid)
-	case <-time.After(time.Second):
-		t.Fatal("destroy hook was not called within timeout")
-	}
+	clock.timer(t, 0).fire()
+	assert.Equal(t, "user1", <-called)
 }
 
 func TestAgentPool_SessionIDStableAcrossEviction(t *testing.T) {
@@ -139,7 +137,8 @@ func TestAgentPool_SessionIDStableAcrossEviction(t *testing.T) {
 		mu         sync.Mutex
 		sessionIDs []string
 	)
-	pool := NewPool(stubFactory(), 20*time.Millisecond, nil,
+	clock := &manualTimers{}
+	pool := NewPool(stubFactory(), time.Minute, nil, clock.option(),
 		WithSessionProvider(sp, 20),
 		WithRecordHook(func(_, sessionID, _, _ string) {
 			mu.Lock()
@@ -151,7 +150,7 @@ func TestAgentPool_SessionIDStableAcrossEviction(t *testing.T) {
 	// act
 	_, err := pool.Send(ctx, "user1", "", "hello")
 	require.NoError(t, err)
-	time.Sleep(60 * time.Millisecond) // wait for eviction
+	clock.timer(t, 0).fire() // evict before the next send
 	_, err = pool.Send(ctx, "user1", "", "hello again")
 	require.NoError(t, err)
 
@@ -182,12 +181,13 @@ func TestAgentPool_RecreatedAgentLoadsHistory(t *testing.T) {
 		mu.Unlock()
 		return &Agent{react: newFakeGenerator("ok"), systemPrompt: "sys"}, nil
 	}
-	pool := NewPool(factory, 20*time.Millisecond, nil, WithSessionProvider(sp, 20))
+	clock := &manualTimers{}
+	pool := NewPool(factory, time.Minute, nil, clock.option(), WithSessionProvider(sp, 20))
 	ctx := context.Background()
 
 	// act
 	_, _ = pool.Send(ctx, "user1", "", "hello")
-	time.Sleep(60 * time.Millisecond) // wait for eviction
+	clock.timer(t, 0).fire() // evict before the next send
 	_, _ = pool.Send(ctx, "user1", "", "hello again")
 
 	// assert — factory called twice and second call received history from provider
