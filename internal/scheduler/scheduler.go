@@ -206,7 +206,10 @@ func humanDuration(d time.Duration) string {
 
 func cloneSlice(src []*Schedule) []*Schedule {
 	out := make([]*Schedule, len(src))
-	copy(out, src)
+	for i, schedule := range src {
+		snapshot := *schedule
+		out[i] = &snapshot
+	}
 	return out
 }
 
