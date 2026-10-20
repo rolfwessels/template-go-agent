@@ -1,6 +1,6 @@
 # 💻 Development
 
-Use the [quick start](../README.md#-quick-start) for setup. Commands below are defined in the [Makefile](../Makefile); service commands work in the dev shell or locally with Go 1.26 and the needed tools.
+Use the [quick start](../README.md#-quick-start) for setup. Commands below are defined in the [Makefile](../Makefile); service commands work in the dev shell or locally with Go 1.26.9 and the needed tools.
 
 ## Make commands
 
@@ -39,7 +39,7 @@ The [workflow](../.github/workflows/github-action.yml) runs on pushes to `main` 
 
 | Job | Runs after | Work |
 |---|---|---|
-| `test` | — | Go 1.26; `make test` and `go build ./cmd/template-go-agent`. |
+| `test` | — | Go 1.26.9; `make test` and `go build ./cmd/template-go-agent`. |
 | `build` | `test` | `make publish`; upload archives with 90-day retention. |
 | `release` | `build` | On `main`, download archives and publish release `v<version>`. |
 | `docker` | `test` | Only upstream pushes to `main`; Buildx/QEMU build and Docker Hub push. |

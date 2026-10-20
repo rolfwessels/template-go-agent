@@ -39,7 +39,7 @@ make start
 Type a question and press Enter; `Ctrl+C` quits and triggers a Memory Sweep.
 Set `DISCORD_TOKEN` to use Discord instead of the CLI, then run `make start`.
 
-Prefer running locally? With Go 1.26 installed, `make test` and `make start` also work from the repository root.
+Prefer running locally? With Go 1.26.9 installed, `make test` and `make start` also work from the repository root.
 Released binaries for Linux, macOS, and Windows are on the [releases page](https://github.com/rolfwessels/template-go-agent/releases); run `template-go-agent` (`template-go-agent.exe` on Windows) from a directory containing `.env`, or supply environment variables.
 
 State and logs live in `.storage/` under the working directory; keep it to preserve sessions, memory, reminders, and usage records.

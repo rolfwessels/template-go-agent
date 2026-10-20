@@ -142,6 +142,23 @@ func TestScheduler_ListForUser_ReturnsActiveSchedules(t *testing.T) {
 	assert.Empty(t, sched.ListForUser("unknown"))
 }
 
+func TestScheduler_ListForUser_ReturnsIndependentSnapshots(t *testing.T) {
+	sched, _, _ := setupScheduler(t)
+	sc := sampleSchedule(t)
+	require.NoError(t, sched.Add(context.Background(), sc))
+
+	first := sched.ListForUser(sc.UserID)
+	second := sched.ListForUser(sc.UserID)
+	require.Len(t, first, 1)
+	require.Len(t, second, 1)
+	assert.NotSame(t, sc, first[0])
+	assert.NotSame(t, first[0], second[0])
+
+	first[0].Prompt = "changed by caller"
+	assert.Equal(t, sc.Prompt, second[0].Prompt)
+	assert.Equal(t, sc.Prompt, sched.ListForUser(sc.UserID)[0].Prompt)
+}
+
 // --- Goroutine / firing tests ---
 
 func TestScheduler_OneShotFiresOnceAndIsRemoved(t *testing.T) {
@@ -162,7 +179,7 @@ func TestScheduler_OneShotFiresOnceAndIsRemoved(t *testing.T) {
 	// act — fire one tick
 	tickCh <- time.Now()
 	require.Eventually(t, func() bool {
-		return pool.callCount() == 1
+		return pool.callCount() == 1 && plat.callCount() == 1 && len(sched.ListForUser("user-1")) == 0
 	}, time.Second, 5*time.Millisecond)
 
 	// assert
@@ -190,7 +207,8 @@ func TestScheduler_RecurringAdvancesNextFireAt(t *testing.T) {
 	// act — first tick fires
 	tickCh <- time.Now()
 	require.Eventually(t, func() bool {
-		return pool.callCount() == 1
+		list := sched.ListForUser("user-1")
+		return pool.callCount() == 1 && len(list) == 1 && list[0].NextFireAt == fireAt+interval
 	}, time.Second, 5*time.Millisecond)
 
 	// assert — still present, NextFireAt advanced
@@ -201,7 +219,8 @@ func TestScheduler_RecurringAdvancesNextFireAt(t *testing.T) {
 	// act — second tick fires (schedule is due again if we move time past the new NextFireAt)
 	tickCh <- time.Unix(fireAt+interval+1, 0)
 	require.Eventually(t, func() bool {
-		return pool.callCount() == 2
+		list := sched.ListForUser("user-1")
+		return pool.callCount() == 2 && len(list) == 1 && list[0].NextFireAt == fireAt+2*interval
 	}, time.Second, 5*time.Millisecond)
 
 	list = sched.ListForUser("user-1")
@@ -280,7 +299,9 @@ func TestScheduler_SurvivesRestart_ScheduleFires(t *testing.T) {
 	t.Cleanup(sched2.Stop)
 
 	tickCh <- time.Now()
-	require.Eventually(t, func() bool { return pool.callCount() == 1 }, time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool {
+		return pool.callCount() == 1 && plat.callCount() == 1 && len(sched2.ListForUser("user-1")) == 0
+	}, time.Second, 5*time.Millisecond)
 
 	// assert — fired once, one-shot removed
 	assert.Equal(t, 1, pool.callCount())

@@ -1,5 +1,5 @@
 # ── base: shared Go toolchain ─────────────────────────────────────────────────
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS base
+FROM --platform=$BUILDPLATFORM golang:1.26.9-alpine AS base
 
 RUN apk update \
   && apk upgrade \
