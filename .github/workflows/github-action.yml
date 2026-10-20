@@ -26,7 +26,8 @@ jobs:
       - name: Audit dependencies for known vulnerabilities
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck -scan=module
+          # Scan every imported package; the module root contains no Go files.
+          govulncheck -scan=package ./...
 
       - name: Build (smoke test)
         run: go build ./cmd/template-go-agent
