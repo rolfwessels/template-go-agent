@@ -38,6 +38,8 @@ Type a question and press Enter. The agent replies in the same terminal. Press C
 
 With Go 1.26.9 installed locally, you can run `make start` from the repository root. To use Discord, set `DISCORD_TOKEN` before starting the agent.
 
+The dev shell shows a 🐳 prompt and saves Zsh history in a project volume across `make down` and rebuilds.
+
 ## 📋 Make commands
 
 | Command | Purpose |
