@@ -18,7 +18,7 @@ Read [README.md](README.md) for project setup and commands. Read [CONTEXT.md](CO
 ## Verification and handoff
 
 - For a behavior change, start with a failing test, make it pass with the smallest change, and then refactor.
-- Run `make test` and any relevant configured checks for code changes.
+- Run `make verify` for code changes. It includes `make test` and the dependency audit (`make scan`).
 - Use `make start` with `DISCORD_TOKEN` empty to exercise the CLI. For session or memory changes, check the resulting state under `.storage/`.
 - Exercise the real entry point after meaningful behavior changes and before opening or updating the pull request. Check the output and relevant side effects.
 - Mock external systems at their boundaries. Confirm what test or dry-run modes skip, preserve the coverage of failing checks, and report any verification gaps.

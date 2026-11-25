@@ -1,6 +1,6 @@
 # 💻 Development
 
-Use the [quick start](../README.md#-quick-start) for setup. Commands below are defined in the [Makefile](../Makefile); service commands work in the dev shell or locally with Go 1.26.9 and the needed tools.
+Use the [quick start](../README.md#-quick-start) for setup. The [Makefile](../Makefile) defines these commands. Service commands work in the dev shell or locally with Go 1.26.11 and the needed tools.
 
 ## Make commands
 
@@ -12,6 +12,8 @@ Use the [quick start](../README.md#-quick-start) for setup. Commands below are d
 | `make start` | Run `go run ./cmd/template-go-agent`; CLI or Discord based on config. |
 | `make vet` | Run `go vet ./...`. |
 | `make test` | Vet, then run all tests verbosely without cached results. |
+| `make scan` | Audit imported packages and the Go standard library with `govulncheck`. |
+| `make verify` | Run the tests and dependency audit. |
 | `make version` / `make print-version` | Display version / emit the plain version for scripts. |
 | `make publish` | Replace `dist/` with binary-only archives for five platforms (requires tar/zip). |
 | `make install` / `make uninstall` | On host: link/unlink the Linux amd64 release binary in `~/.local/bin`; publish first. |
@@ -39,7 +41,7 @@ The [workflow](../.github/workflows/github-action.yml) runs on pushes to `main` 
 
 | Job | Runs after | Work |
 |---|---|---|
-| `test` | — | Go 1.26.9; `make test` and `go build ./cmd/template-go-agent`. |
+| `test` | — | Run `make test`, `make scan`, and `go build ./cmd/template-go-agent` with the Go version in `go.mod`. |
 | `build` | `test` | `make publish`; upload archives with 90-day retention. |
 | `release` | `build` | On `main`, download archives and publish release `v<version>`. |
 | `docker` | `test` | Only upstream pushes to `main`; Buildx/QEMU build and Docker Hub push. |

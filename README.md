@@ -36,7 +36,7 @@ make start
 
 Type a question and press Enter. The agent replies in the same terminal. Press Ctrl+C to quit and trigger a Memory Sweep.
 
-With Go 1.26.9 installed locally, you can run `make start` from the repository root. To use Discord, set `DISCORD_TOKEN` before starting the agent.
+With Go 1.26.11 installed locally, you can run `make start` from the repository root. To use Discord, set `DISCORD_TOKEN` before starting the agent.
 
 The dev shell shows a 🐳 prompt and saves Zsh history in a project volume across `make down` and rebuilds.
 
@@ -47,6 +47,8 @@ The dev shell shows a 🐳 prompt and saves Zsh history in a project volume acro
 | `make up` | Start the development container and open its shell. |
 | `make start` | Start the agent in CLI or Discord mode. |
 | `make test` | Run Go vet and the tests. |
+| `make scan` | Audit imported Go packages and the Go standard library. |
+| `make verify` | Run tests and the dependency audit. |
 | `make down` | Stop the development container from the host. |
 
 Run `make help` for more targets.

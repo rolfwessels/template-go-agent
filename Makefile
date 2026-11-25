@@ -46,6 +46,8 @@ ifeq ("$(wildcard $(docker-file-check))","")
 endif
 
 # Targets
+.PHONY: scan verify
+
 help:
 	@echo "The following commands can be used for building & running & deploying the $(project)"
 	@echo "-------------------------------------------------------------------------------------"
@@ -60,6 +62,8 @@ help:
 	@echo " - start         : Run the $(project)"
 	@echo " - vet           : Vet the $(project)"
 	@echo " - test          : Vet and test the $(project)"
+	@echo " - scan          : Audit dependencies for known vulnerabilities"
+	@echo " - verify        : Run tests and the dependency audit"
 	@echo " - publish       : Publish the $(project)"
 	@echo " - install       : Symlink dist/linux-amd64/$(binary) into ~/.local/bin (run on host)"
 	@echo " - uninstall     : Remove the ~/.local/bin/$(binary) symlink (run on host)"
@@ -110,6 +114,12 @@ vet:
 test: vet
 	@echo -e "Testing ${GREEN}v$(version)${NC}"
 	@go test ./... -v -count=1
+
+scan:
+	@go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 -scan=package ./...
+
+verify: test
+	@$(MAKE) scan
 
 PLATFORMS := linux-amd64 linux-arm64 windows-amd64 darwin-amd64 darwin-arm64
 

@@ -1,6 +1,6 @@
 module github.com/rolfwessels/template-go-agent
 
-go 1.26.9
+go 1.26.11
 
 require (
 	github.com/bwmarrin/discordgo v0.29.0
@@ -10,7 +10,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/shopspring/decimal v1.6.0
 	github.com/stretchr/testify v1.12.1
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 )
 
 require (
@@ -25,7 +25,7 @@ require (
 	github.com/evanphx/json-patch v0.5.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/goph/emperror v0.17.2 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/gorilla/websocket v1.5.4-0.20240701034025-d67f41855da4 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.1 // indirect
 	github.com/mailru/easyjson v0.9.2 // indirect
