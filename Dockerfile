@@ -1,5 +1,5 @@
 # ── base: shared Go toolchain ─────────────────────────────────────────────────
-FROM --platform=$BUILDPLATFORM golang:1.26.9-alpine AS base
+FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine AS base
 
 RUN apk update \
   && apk upgrade \
@@ -47,7 +47,7 @@ ARG GID=1000
 
 RUN addgroup -g ${GID} dev && \
     adduser -D -u ${UID} -G dev -s /bin/zsh dev && \
-    mkdir -p /template-go-agent && chown dev:dev /template-go-agent
+    mkdir -p /template-go-agent /cache && chown dev:dev /template-go-agent /cache
 
 ENV HOME=/home/dev
 ENV GOPATH=/home/dev/go
@@ -57,9 +57,11 @@ ENV TERM=xterm-256color
 
 USER dev
 
-RUN mkdir -p /home/dev/.cache/go-build /home/dev/go/pkg/mod
+RUN mkdir -p /home/dev/.cache/go-build /home/dev/go/pkg/mod && \
+    install -m 600 /dev/null /cache/.zsh_history
 
 RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended && \
-    git clone https://github.com/zsh-users/zsh-autosuggestions.git ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions
+    git clone --depth 1 https://github.com/zsh-users/zsh-autosuggestions.git "$HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
 
 WORKDIR /template-go-agent
+COPY --chown=dev:dev zshrc /home/dev/.zshrc

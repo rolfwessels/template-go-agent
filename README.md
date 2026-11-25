@@ -20,36 +20,51 @@ You’ll also need OpenAI and Tavily API keys; Discord is optional.
 
 ## 🚀 Quick start
 
-From the repository root:
+From the repository root, copy the sample configuration.
 
-```bash
+```sh
 cp .env.example .env
-$EDITOR .env
-make up
 ```
 
-Set `OPENAI_API_KEY` and `TAVILY_API_KEY` in `.env` before continuing.
-`make up` builds/starts the dev container and attaches its shell. Inside that shell:
+Set `OPENAI_API_KEY` and `TAVILY_API_KEY` in `.env`. Leave `DISCORD_TOKEN` empty for CLI chat.
 
-```bash
-make test
+Run `make up` on the host to open the development shell, then start the agent in that shell.
+
+```sh
 make start
 ```
 
-Type a question and press Enter; `Ctrl+C` quits and triggers a Memory Sweep.
-Set `DISCORD_TOKEN` to use Discord instead of the CLI, then run `make start`.
+Type a question and press Enter. The agent replies in the same terminal. Press Ctrl+C to quit and trigger a Memory Sweep.
 
-Prefer running locally? With Go 1.26.9 installed, `make test` and `make start` also work from the repository root.
-Released binaries for Linux, macOS, and Windows are on the [releases page](https://github.com/rolfwessels/template-go-agent/releases); run `template-go-agent` (`template-go-agent.exe` on Windows) from a directory containing `.env`, or supply environment variables.
+With Go 1.26.11 installed locally, you can run `make start` from the repository root. To use Discord, set `DISCORD_TOKEN` before starting the agent.
 
-State and logs live in `.storage/` under the working directory; keep it to preserve sessions, memory, reminders, and usage records.
-On the host, `make down` stops the dev container.
+The dev shell shows a 🐳 prompt and saves Zsh history in a project volume across `make down` and rebuilds.
+
+## 📋 Make commands
+
+| Command | Purpose |
+| --- | --- |
+| `make up` | Start the development container and open its shell. |
+| `make start` | Start the agent in CLI or Discord mode. |
+| `make test` | Run Go vet and the tests. |
+| `make scan` | Audit imported Go packages and the Go standard library. |
+| `make verify` | Run tests and the dependency audit. |
+| `make down` | Stop the development container from the host. |
+
+Run `make help` for more targets.
+
+## 📦 Releases and deployment
+
+Download an archive for Linux, macOS, or Windows from the [releases page](https://github.com/rolfwessels/template-go-agent/releases). Run the extracted binary from a directory containing `.env` or supply the environment variables directly.
+
+Keep `.storage/` in the working directory to preserve sessions, memory, reminders, and usage records between runs.
 
 ## 🗂 Docs
 
 - [Configuration](docs/configuration.md) — environment variables and prompt overrides.
 - [HTTP fetch security](docs/http-fetch-security.md) — public research policy and limits.
 - [Development](docs/development.md) — make commands, versions, CI, and Docker publishing.
+- [Agent instructions](AGENTS.md) — project conventions and verification.
 - [Roadmap](docs/roadmap.md) — remaining gaps and possible extensions.
 - [Domain context](CONTEXT.md) — vocabulary, storage, and lifecycle.
 - [Architecture decisions](docs/adr/) — decisions and their trade-offs.
