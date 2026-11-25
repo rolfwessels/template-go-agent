@@ -50,6 +50,7 @@ On the host, `make down` stops the dev container.
 - [Configuration](docs/configuration.md) — environment variables and prompt overrides.
 - [HTTP fetch security](docs/http-fetch-security.md) — public research policy and limits.
 - [Development](docs/development.md) — make commands, versions, CI, and Docker publishing.
+- [Agent instructions](AGENTS.md) — project conventions and verification.
 - [Roadmap](docs/roadmap.md) — remaining gaps and possible extensions.
 - [Domain context](CONTEXT.md) — vocabulary, storage, and lifecycle.
 - [Architecture decisions](docs/adr/) — decisions and their trade-offs.

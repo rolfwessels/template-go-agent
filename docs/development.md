@@ -27,7 +27,7 @@ For CLI chat, run `make start` with `DISCORD_TOKEN` empty.
 
 ## Versioning and PRs
 
-Use `feature/` or `bug/` branches off `main`, then open a PR against `main`. Run `make test` before review.
+See [AGENTS.md](../AGENTS.md) for branch naming, pull requests, and verification.
 Versions follow a SemVer-style scheme: `versionPrefix` in the Makefile sets major/minor manually (`0.1` currently); patch is the full Git commit count on `main`.
 Off `main`, versions are `0.1.<origin/main-count>.<branch-commit-count>-alpha`. Keep full Git history and an `origin/main` ref for meaningful versions; fallback counts are zero when Git data is unavailable.
 PR builds upload archives as workflow artifacts. A push to `main` creates a versioned [GitHub release](https://github.com/rolfwessels/template-go-agent/releases).
